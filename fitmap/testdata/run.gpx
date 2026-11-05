@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1" xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="fitmap test">
+	<metadata>
+		<name>Morning Run</name>
+		<desc>easy</desc>
+		<author></author>
+	</metadata>
+	<trk>
+		<name>Morning Run</name>
+		<type>9</type>
+		<trkseg>
+			<trkpt lat="47.5" lon="9.3">
+				<ele>400</ele>
+				<time>2026-05-01T07:00:00Z</time>
+				<extensions>
+					<gpxtpx:TrackPointExtension>
+						<gpxtpx:hr>150</gpxtpx:hr>
+						<gpxtpx:cad>88</gpxtpx:cad>
+						<gpxtpx:atemp>18.5</gpxtpx:atemp>
+					</gpxtpx:TrackPointExtension>
+					<power>250</power>
+				</extensions>
+			</trkpt>
+			<trkpt lat="47.5002" lon="9.3002">
+				<ele>408</ele>
+				<time>2026-05-01T07:00:05Z</time>
+				<extensions>
+					<power>250</power>
+				</extensions>
+			</trkpt>
+			<trkpt lat="47.5004" lon="9.3004">
+				<ele>416</ele>
+				<time>2026-05-01T07:00:10Z</time>
+				<extensions>
+					<gpxtpx:TrackPointExtension>
+						<gpxtpx:hr>150</gpxtpx:hr>
+						<gpxtpx:cad>88</gpxtpx:cad>
+						<gpxtpx:atemp>18.5</gpxtpx:atemp>
+					</gpxtpx:TrackPointExtension>
+					<power>250</power>
+				</extensions>
+			</trkpt>
+			<trkpt lat="47.5006" lon="9.3006">
+				<ele>424</ele>
+				<time>2026-05-01T07:00:15Z</time>
+				<extensions>
+					<power>250</power>
+				</extensions>
+			</trkpt>
+			<trkpt lat="47.5008" lon="9.3008">
+				<time>2026-05-01T07:00:20Z</time>
+				<extensions>
+					<gpxtpx:TrackPointExtension>
+						<gpxtpx:hr>150</gpxtpx:hr>
+						<gpxtpx:cad>88</gpxtpx:cad>
+						<gpxtpx:atemp>18.5</gpxtpx:atemp>
+					</gpxtpx:TrackPointExtension>
+					<power>250</power>
+				</extensions>
+			</trkpt>
+			<trkpt lat="47.501" lon="9.301">
+				<ele>410</ele>
+				<time>2026-05-01T07:00:25Z</time>
+				<extensions>
+					<power>250</power>
+				</extensions>
+			</trkpt>
+			<trkpt lat="47.5012" lon="9.3012">
+				<ele>418</ele>
+				<time>2026-05-01T07:00:30Z</time>
+				<extensions>
+					<gpxtpx:TrackPointExtension>
+						<gpxtpx:hr>150</gpxtpx:hr>
+						<gpxtpx:cad>88</gpxtpx:cad>
+						<gpxtpx:atemp>18.5</gpxtpx:atemp>
+					</gpxtpx:TrackPointExtension>
+					<power>250</power>
+				</extensions>
+			</trkpt>
+			<trkpt lat="47.5014" lon="9.3014">
+				<ele>426</ele>
+				<time>2026-05-01T07:00:35Z</time>
+				<extensions>
+					<power>250</power>
+				</extensions>
+			</trkpt>
+			<trkpt lat="47.5016" lon="9.3016">
+				<ele>404</ele>
+				<time>2026-05-01T07:00:40Z</time>
+				<extensions>
+					<gpxtpx:TrackPointExtension>
+						<gpxtpx:hr>150</gpxtpx:hr>
+						<gpxtpx:cad>88</gpxtpx:cad>
+						<gpxtpx:atemp>18.5</gpxtpx:atemp>
+					</gpxtpx:TrackPointExtension>
+					<power>250</power>
+				</extensions>
+			</trkpt>
+			<trkpt lat="47.5018" lon="9.3018">
+				<ele>412</ele>
+				<time>2026-05-01T07:00:45Z</time>
+				<extensions>
+					<power>250</power>
+				</extensions>
+			</trkpt>
+			<trkpt lat="47.502" lon="9.302">
+				<ele>420</ele>
+				<time>2026-05-01T07:00:50Z</time>
+				<extensions>
+					<gpxtpx:TrackPointExtension>
+						<gpxtpx:hr>150</gpxtpx:hr>
+						<gpxtpx:cad>88</gpxtpx:cad>
+						<gpxtpx:atemp>18.5</gpxtpx:atemp>
+					</gpxtpx:TrackPointExtension>
+					<power>250</power>
+				</extensions>
+			</trkpt>
+			<trkpt lat="47.5022" lon="9.3022">
+				<ele>428</ele>
+				<time>2026-05-01T07:00:55Z</time>
+				<extensions>
+					<power>250</power>
+				</extensions>
+			</trkpt>
+		</trkseg>
+	</trk>
+</gpx>

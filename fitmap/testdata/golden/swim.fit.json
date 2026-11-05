@@ -1,0 +1,76 @@
+{
+  "activity": {
+    "payload": {
+      "discipline": "DISCIPLINE_SWIM_POOL",
+      "elapsedDuration": "3600s",
+      "endTime": "2026-05-01T08:00:00Z",
+      "laps": [
+        {
+          "distanceM": 1000,
+          "elapsedDuration": "1800s",
+          "index": 1,
+          "startTime": "2026-05-01T07:00:00Z"
+        },
+        {
+          "distanceM": 1000,
+          "elapsedDuration": "1800s",
+          "index": 2,
+          "startOffsetS": "1800",
+          "startTime": "2026-05-01T07:30:00Z"
+        }
+      ],
+      "movingDuration": "3000s",
+      "providerNativeType": "swimming/lap_swimming",
+      "startTime": "2026-05-01T07:00:00Z",
+      "streamSummary": {
+        "channels": [
+          "STREAM_CHANNEL_TIME",
+          "STREAM_CHANNEL_HEART_RATE"
+        ],
+        "sampleCount": 5,
+        "sampleRateHz": 0.002
+      },
+      "summary": {
+        "avgHeartRateBpm": 135,
+        "distanceM": 2000,
+        "maxHeartRateBpm": 134,
+        "poolLengthM": 25,
+        "totalStrokes": 880
+      },
+      "type": "ACTIVITY_TYPE_SWIM"
+    },
+    "stream": {
+      "channels": [
+        "STREAM_CHANNEL_TIME",
+        "STREAM_CHANNEL_HEART_RATE"
+      ],
+      "heartRateBpm": [
+        130,
+        131,
+        132,
+        133,
+        134
+      ],
+      "resolutionHz": 0.002,
+      "sampleCount": 5,
+      "timeS": [
+        0,
+        600,
+        1200,
+        1800,
+        2400
+      ]
+    }
+  },
+  "info": {
+    "Format": "fit",
+    "StartTime": "2026-05-01T07:00:00Z",
+    "NativeType": "swimming/lap_swimming",
+    "Sessions": 1,
+    "Samples": 5,
+    "Manufacturer": "development",
+    "Product": "Pool-O-Matic",
+    "SerialNumber": 0,
+    "TimeCreated": "2026-05-01T07:00:00Z"
+  }
+}

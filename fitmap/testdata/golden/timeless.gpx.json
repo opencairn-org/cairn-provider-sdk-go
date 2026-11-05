@@ -1,0 +1,64 @@
+{
+  "activity": {
+    "payload": {
+      "customSubtype": "space walk",
+      "providerNativeType": "space walk",
+      "streamSummary": {
+        "channels": [
+          "STREAM_CHANNEL_TIME",
+          "STREAM_CHANNEL_LATITUDE",
+          "STREAM_CHANNEL_LONGITUDE",
+          "STREAM_CHANNEL_DISTANCE"
+        ],
+        "hasGps": true,
+        "sampleCount": 3,
+        "sampleRateHz": 1
+      },
+      "summary": {
+        "distanceM": 150.244
+      },
+      "type": "ACTIVITY_TYPE_WORKOUT"
+    },
+    "stream": {
+      "channels": [
+        "STREAM_CHANNEL_TIME",
+        "STREAM_CHANNEL_LATITUDE",
+        "STREAM_CHANNEL_LONGITUDE",
+        "STREAM_CHANNEL_DISTANCE"
+      ],
+      "distanceM": [
+        0,
+        75.122,
+        150.244
+      ],
+      "latitude": [
+        47.5,
+        47.5,
+        47.5
+      ],
+      "longitude": [
+        9.3,
+        9.301,
+        9.302
+      ],
+      "resolutionHz": 1,
+      "sampleCount": 3,
+      "timeS": [
+        0,
+        1,
+        2
+      ]
+    }
+  },
+  "info": {
+    "Format": "gpx",
+    "StartTime": "0001-01-01T00:00:00Z",
+    "NativeType": "space walk",
+    "Sessions": 0,
+    "Samples": 3,
+    "Manufacturer": "",
+    "Product": "",
+    "SerialNumber": 0,
+    "TimeCreated": "0001-01-01T00:00:00Z"
+  }
+}

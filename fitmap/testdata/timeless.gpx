@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx  xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="fitmap test">
+	<metadata>
+		<author></author>
+	</metadata>
+	<trk>
+		<type>space walk</type>
+		<trkseg>
+			<trkpt lat="47.5" lon="9.3"></trkpt>
+			<trkpt lat="47.5" lon="9.301"></trkpt>
+			<trkpt lat="47.5" lon="9.302"></trkpt>
+		</trkseg>
+	</trk>
+</gpx>

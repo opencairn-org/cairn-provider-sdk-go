@@ -1,0 +1,50 @@
+{
+  "activity": {
+    "payload": {
+      "elapsedDuration": "2s",
+      "endTime": "2026-05-01T07:00:02Z",
+      "startTime": "2026-05-01T07:00:00Z",
+      "streamSummary": {
+        "channels": [
+          "STREAM_CHANNEL_TIME",
+          "STREAM_CHANNEL_DISTANCE"
+        ],
+        "sampleCount": 3,
+        "sampleRateHz": 1
+      },
+      "summary": {
+        "distanceM": 2
+      },
+      "type": "ACTIVITY_TYPE_WORKOUT"
+    },
+    "stream": {
+      "channels": [
+        "STREAM_CHANNEL_TIME",
+        "STREAM_CHANNEL_DISTANCE"
+      ],
+      "distanceM": [
+        0,
+        1,
+        2
+      ],
+      "resolutionHz": 1,
+      "sampleCount": 3,
+      "timeS": [
+        0,
+        1,
+        2
+      ]
+    }
+  },
+  "info": {
+    "Format": "fit",
+    "StartTime": "2026-05-01T07:00:00Z",
+    "NativeType": "",
+    "Sessions": 0,
+    "Samples": 3,
+    "Manufacturer": "wahoo_fitness",
+    "Product": "2",
+    "SerialNumber": 0,
+    "TimeCreated": "2026-05-01T07:00:00Z"
+  }
+}
