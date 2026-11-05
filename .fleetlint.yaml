@@ -1,0 +1,20 @@
+# .fleetlint.yaml: https://github.com/fleetlint/fleetlint
+version: 1
+extends:
+  - fleetlint:recommended
+facts:
+  visibility: public   # the forge reports it once the repository is pushed; update it if the repository changes hands
+  artifacts:   # what the release publishes, as detected at init
+    - kind: release-files
+      workflows: [.github/workflows/release.yml]
+scopes:   # each directory is checked as a project of the stacks listed, as detected at init
+  - path: .
+    stacks: [go]
+# discovered: forge=unknown visibility=unknown tier=1 (inferred from release pipeline) layout=single release=yes taskrunner=make container=none
+# The stacks and artifacts listed above are what fleetlint checks: the lists replace detection, and `fleetlint check`
+# notes what detection finds beyond them. Everything else is re-detected on every run; pin tier or visibility under
+# `facts:` when detection is wrong.
+overrides:
+  changelog/generator-configured:
+    enabled: false
+    reason: "CHANGELOG.md is curated by hand (Keep a Changelog); `make release` refuses a tag without its section"
