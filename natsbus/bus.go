@@ -390,7 +390,15 @@ func (h *kvHandle) CompareAndSet(
 	value []byte,
 	expectedRev uint64,
 ) (uint64, bool, error) {
-	rev, err := h.kv.Update(ctx, key, value, expectedRev)
+	var rev uint64
+	var err error
+	if expectedRev == 0 {
+		// A deleted or purged key still has a last revision (its marker), so
+		// Update(…, 0) would never succeed again; Create retries behind it.
+		rev, err = h.kv.Create(ctx, key, value)
+	} else {
+		rev, err = h.kv.Update(ctx, key, value, expectedRev)
+	}
 	if err == nil {
 		return rev, true, nil
 	}

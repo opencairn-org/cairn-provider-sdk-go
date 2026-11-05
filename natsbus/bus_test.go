@@ -311,3 +311,36 @@ func TestRateLimiter_OnNATSKV(t *testing.T) {
 		t.Fatalf("reserve over capacity = %v, %v", ok, err)
 	}
 }
+
+// A deleted or purged key keeps a marker revision; the limiter's create
+// path must get past it instead of losing every CAS round.
+func TestRateLimiter_OnNATSKV_RecoversDeletedKey(t *testing.T) {
+	bus, js := newTestBus(t)
+	ctx := context.Background()
+	kv, err := bus.KV("kv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := js.KeyValue(ctx, "kv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rl := NewRateLimiter(kv, map[string]int{"strava:short": 2})
+	for name, remove := range map[string]func(string) error{
+		"delete": func(k string) error { return raw.Delete(ctx, k) },
+		"purge":  func(k string) error { return raw.Purge(ctx, k) },
+	} {
+		if ok, _, err := rl.Reserve(ctx, "strava:short", 1); !ok || err != nil {
+			t.Fatalf("%s: first reserve = %v, %v", name, ok, err)
+		}
+		if err := remove(kvKey("strava:short")); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if ok, _, err := rl.Reserve(ctx, "strava:short", 1); !ok || err != nil {
+			t.Fatalf("%s: reserve after removal = %v, %v", name, ok, err)
+		}
+		if err := raw.Delete(ctx, kvKey("strava:short")); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
