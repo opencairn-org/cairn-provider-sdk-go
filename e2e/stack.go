@@ -26,6 +26,8 @@ const (
 	minioBucket  = "cairn-e2e"
 	e2eDBPrefix  = "cairn_e2e_"
 	fixWebhookID = "cebd00c" // core: keep the webhook verify handshake out of CAIRN_WEBHOOKS
+	// conformanceOldSubject is the pre-pool format the tool used before fix(conformance).
+	conformanceOldSubject = `"cairn.results.reconcile.%s.%s"`
 )
 
 // Stack is the shared environment: compose services, the core server and
@@ -45,6 +47,9 @@ type Stack struct {
 	CoreBranch string
 	// FixWebhookVerify is true when core's checkout contains the verify-stream fix.
 	FixWebhookVerify bool
+	// FixConformanceActive is true when core's worker-conformance awaits the
+	// reconcile result on the pool's subject (ADR 0006).
+	FixConformanceActive bool
 	// Admin is the bootstrap admin the harness logs in as.
 	AdminEmail    string
 	AdminPassword string
@@ -199,6 +204,8 @@ func (s *Stack) buildCore(ctx context.Context) error {
 	s.CoreCommit, s.CoreBranch = strings.TrimSpace(commit), strings.TrimSpace(branch)
 	_, err = run(ctx, s.CoreRoot, nil, "git", "merge-base", "--is-ancestor", fixWebhookID, "HEAD")
 	s.FixWebhookVerify = err == nil
+	tool, _ := os.ReadFile(filepath.Join(s.CoreRoot, "cmd", "worker-conformance", "main.go")) //nolint:gosec // G304: core's checkout
+	s.FixConformanceActive = !strings.Contains(string(tool), conformanceOldSubject)
 	s.log("building core %s (%s@%s)", s.Release, s.CoreBranch, s.CoreCommit)
 	_, err = run(ctx, s.CoreRoot, map[string]string{"CGO_ENABLED": "0"}, "go", "build", "-trimpath",
 		"-ldflags", "-X main.Version="+s.Release, "-o", filepath.Join(s.OutDir, "cairn"), "./cmd/server")

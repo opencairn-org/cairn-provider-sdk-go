@@ -89,13 +89,16 @@ api-compat: ## exported API vs the previous v* tag (gorelease); breaking change 
 	gorelease -base="$$base"
 
 # End-to-end: a provider worker against a real cairn-core (../cairn-core, its compose dev services via
-# podman). Not part of check; see e2e/README.md. E2E_REUSE_STACK=1 skips compose up, E2E_DOWN=1 stops it after.
-e2e: ## end-to-end run of one provider spec: make e2e PROVIDER=strava
-	@test -n "$(PROVIDER)" || { echo "usage: make e2e PROVIDER=<name>  (specs: e2e/providers/*.yaml)"; exit 1; }
-	E2E_PROVIDER=$(PROVIDER) go test -tags e2e -count=1 -timeout 30m -v ./e2e
+# podman). Not part of check; see e2e/README.md. PROVIDER=<name> runs e2e/providers/<name>.yaml, SPEC=/abs/path.yaml a
+# spec a worker repository owns. Runs share the compose NATS/MinIO, so flock serialises concurrent invocations.
+# E2E_REUSE_STACK=1 skips compose up, E2E_DOWN=1 stops it after.
+E2E_LOCK ?= /tmp/cairn-e2e.lock
+e2e: ## end-to-end run of one spec: make e2e PROVIDER=strava | make e2e SPEC=/abs/path/<name>.yaml
+	@test -n "$(PROVIDER)$(SPEC)" || { echo "usage: make e2e PROVIDER=<name> (e2e/providers/<name>.yaml) or make e2e SPEC=/abs/path/<name>.yaml"; exit 1; }
+	flock $(E2E_LOCK) env E2E_PROVIDER=$(PROVIDER) E2E_SPEC=$(SPEC) go test -tags e2e -count=1 -timeout 30m -v ./e2e
 
 e2e-all: ## end-to-end run of every spec in e2e/providers
-	E2E_PROVIDER=all go test -tags e2e -count=1 -timeout 90m -v ./e2e
+	flock $(E2E_LOCK) env E2E_PROVIDER=all go test -tags e2e -count=1 -timeout 90m -v ./e2e
 
 bench: ## benchmarks (not part of check)
 	go test -run='^$$' -bench=. -benchmem $(PKGS)

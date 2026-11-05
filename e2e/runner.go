@@ -142,8 +142,9 @@ func (r *runner) report() string {
 	}
 	fmt.Fprintf(&b, "# e2e %s — %s\n\n", r.spec.Provider, verdict)
 	fmt.Fprintf(&b, "- started: %s, total %s\n", r.started.UTC().Format(time.RFC3339), time.Since(r.started).Round(time.Millisecond))
-	fmt.Fprintf(&b, "- core: %s (%s@%s) at %s, db %s, webhook-verify fix present: %v\n",
-		r.stack.Release, r.stack.CoreBranch, r.stack.CoreCommit, r.stack.CoreURL, r.stack.DBName, r.stack.FixWebhookVerify)
+	fmt.Fprintf(&b, "- core: %s (%s@%s) at %s, db %s, webhook-verify fix: %v, conformance --active fix: %v\n",
+		r.stack.Release, r.stack.CoreBranch, r.stack.CoreCommit, r.stack.CoreURL, r.stack.DBName, r.stack.FixWebhookVerify, r.stack.FixConformanceActive)
+	fmt.Fprintf(&b, "- spec: %s\n", r.spec.Path)
 	fmt.Fprintf(&b, "- worker: %s (%s) release %s from %s; mock %s\n", r.spec.Worker.Name, r.spec.WorkerKey(), workerRelease, r.prov.repo, r.prov.mockURL)
 	if r.hb != nil {
 		fmt.Fprintf(&b, "- presence: package %s, parser %s, release %s, webhooks %v\n", r.hb.Package, r.hb.Version, r.hb.Release, r.hb.Webhooks)

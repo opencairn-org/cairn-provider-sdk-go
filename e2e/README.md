@@ -11,14 +11,26 @@ bus, never through the worker's internals.
 
 ```bash
 export PATH="$HOME/go/bin:$PATH"
-make e2e PROVIDER=strava     # one spec: e2e/providers/strava.yaml
-make e2e-all                 # every spec in e2e/providers (templates "_*.yaml" excluded)
+make e2e PROVIDER=strava                                   # one spec: e2e/providers/strava.yaml
+make e2e SPEC=/home/me/cairn-provider-polar/e2e/polar.yaml # a spec the worker repository owns
+make e2e-all                                               # every spec in e2e/providers ("_*.yaml" excluded)
 ```
 
+A worker repository keeps its spec at `<worker>/e2e/<name>.yaml` and runs
+it with `make -C ../cairn-provider-sdk-go e2e SPEC=$PWD/e2e/<name>.yaml`
+(`SPEC` is an absolute path). With `repo:` left empty, the worker repository
+is the parent of the spec's directory; `repo:` may also be absolute or
+relative to the SDK root (the in-tree Strava spec uses the latter).
+
+Runs share the compose NATS and MinIO, and each run resets the `CAIRN_*`
+streams, so the Makefile wraps every run in `flock /tmp/cairn-e2e.lock`
+(`E2E_LOCK` overrides the path): concurrent `make e2e` invocations queue
+behind each other instead of clobbering a running one. Reports go to the
+SDK's `e2e/reports/<provider>-<timestamp>.md` (gitignored), binaries and
+process logs to `e2e/out/<provider>/`.
+
 The package is behind the `e2e` build tag: `make check` lints it
-(`--build-tags e2e`) but does not run it. Reports land in
-`e2e/reports/<provider>-<timestamp>.md` (gitignored), binaries and process logs
-in `e2e/out/<provider>/`.
+(`--build-tags e2e`) but does not run it.
 
 ## Prerequisites
 
@@ -122,7 +134,10 @@ databases of earlier runs), `E2E_TIMEOUT` bounds the whole run (default 25m),
     never sent, the refreshed one was cached and persisted).
 20. **worker-conformance** — `go run ./cmd/worker-conformance --nats …
     --provider … --worker-name … <flags> [--active --account-id …]` in
-    cairn-core exits 0 (output in the report).
+    cairn-core exits 0 (output in the report). A core whose tool still
+    awaits the pre-pool subject `cairn.results.reconcile.<provider>.<account>`
+    (before `fix(conformance)`) fails only the `--active` round-trip; the
+    harness detects that checkout and reports the step as **XFAIL**.
 
 Critical steps (1–7) abort the run; every later step is independent and is
 reported PASS / FAIL / SKIP / XFAIL / XPASS with its duration. On any FAIL the
@@ -130,7 +145,8 @@ report ends with the last 50 lines of the worker, mock and core logs.
 
 ## Adding a provider
 
-Copy `providers/_template.yaml` to `providers/<name>.yaml`. The worker needs
+Copy `providers/_template.yaml` to `<worker>/e2e/<name>.yaml` in the worker
+repository (or to `providers/<name>.yaml` here). The worker needs
 env overrides for its API and OAuth base URLs (`CAIRN_<NAME>_API_BASE_URL`,
 `CAIRN_<NAME>_OAUTH_BASE_URL`) so `provider_meta` points at the mock, and its
 repository needs a standalone mock, `cmd/mock-<name>`, that:

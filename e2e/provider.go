@@ -34,7 +34,7 @@ type providerRun struct {
 }
 
 func newProviderRun(spec *Spec, stack *Stack) *providerRun {
-	return &providerRun{spec: spec, stack: stack, repo: filepath.Clean(filepath.Join(stack.SDKRoot, spec.Repo))}
+	return &providerRun{spec: spec, stack: stack, repo: spec.RepoDir(stack.SDKRoot)}
 }
 
 // binaries are built into <out>/<provider>/.

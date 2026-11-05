@@ -25,7 +25,8 @@ import (
 type Spec struct {
 	// Provider is the provider token in every subject (e.g. "strava").
 	Provider string `yaml:"provider"`
-	// Repo is the worker repository, relative to the SDK root.
+	// Repo is the worker repository: absolute, relative to the SDK root, or
+	// empty for the parent of the spec's directory (<worker>/e2e/<name>.yaml).
 	Repo        string          `yaml:"repo"`
 	Worker      WorkerSpec      `yaml:"worker"`
 	Mock        MockSpec        `yaml:"mock"`
@@ -37,6 +38,8 @@ type Spec struct {
 	Conformance ConformanceSpec `yaml:"conformance"`
 	// Wait bounds every "wait until core shows X" poll (default 2m).
 	Wait time.Duration `yaml:"wait"`
+	// Path is where the spec was read from (set by LoadSpecFile).
+	Path string `yaml:"-"`
 }
 
 // WorkerSpec is how the worker binary is built and started.
@@ -133,19 +136,38 @@ type ConformanceSpec struct {
 
 // LoadSpec reads providers/<name>.yaml under dir and applies defaults.
 func LoadSpec(dir, name string) (*Spec, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, name+".yaml")) //nolint:gosec // G304: a spec under e2e/providers
+	return LoadSpecFile(filepath.Join(dir, name+".yaml"))
+}
+
+// LoadSpecFile reads a spec from path (a worker repository's e2e/<name>.yaml
+// or one under providers/) and applies defaults.
+func LoadSpecFile(path string) (*Spec, error) {
+	raw, err := os.ReadFile(path) //nolint:gosec // G304: the spec the operator named
 	if err != nil {
 		return nil, err
 	}
 	var s Spec
 	if err := yaml.Unmarshal(raw, &s); err != nil {
-		return nil, fmt.Errorf("spec %s: %w", name, err)
+		return nil, fmt.Errorf("spec %s: %w", path, err)
 	}
+	s.Path = path
 	s.defaults()
 	if err := s.validate(); err != nil {
-		return nil, fmt.Errorf("spec %s: %w", name, err)
+		return nil, fmt.Errorf("spec %s: %w", path, err)
 	}
 	return &s, nil
+}
+
+// RepoDir resolves Repo against the SDK root; an empty Repo is the parent of
+// the spec file's directory.
+func (s *Spec) RepoDir(sdkRoot string) string {
+	switch {
+	case s.Repo == "":
+		return filepath.Clean(filepath.Join(filepath.Dir(s.Path), ".."))
+	case filepath.IsAbs(s.Repo):
+		return filepath.Clean(s.Repo)
+	}
+	return filepath.Clean(filepath.Join(sdkRoot, s.Repo))
 }
 
 // ListSpecs returns the spec names in dir, templates excluded.
@@ -199,8 +221,6 @@ func (s *Spec) validate() error {
 	switch {
 	case s.Provider == "":
 		return fmt.Errorf("provider is required")
-	case s.Repo == "":
-		return fmt.Errorf("repo is required")
 	case s.Worker.Package == "":
 		return fmt.Errorf("worker.package is required")
 	case s.Mock.Package == "":

@@ -33,7 +33,9 @@ release matching the cairn-core contract it implements
   core with its own database, the provider's mock and the worker binary;
   connect, discover, full sync, reconcile, webhooks, re-parse, rate limit,
   token refresh and `worker-conformance`, driven by a spec per provider
-  (`e2e/providers/<name>.yaml`) with a Markdown report per run.
+  (`e2e/providers/<name>.yaml`, or a spec a worker repository owns via
+  `make e2e SPEC=/abs/path/<name>.yaml`) with a Markdown report per run;
+  concurrent runs queue on `flock /tmp/cairn-e2e.lock`.
 
 ### Fixed
 - `natsbus.RateLimiter`: a deleted or purged rate-limit key (an operator's

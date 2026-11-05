@@ -590,7 +590,7 @@ func (r *runner) stepConformance() (string, error) {
 	out, err := run(r.ctx, r.stack.CoreRoot, nil, args...)
 	_ = os.WriteFile(filepath.Join(r.prov.outDir(), "conformance.log"), []byte(out), 0o600)
 	if err != nil {
-		if onlyReconcileRoundTripFailed(out) {
+		if !r.stack.FixConformanceActive && onlyReconcileRoundTripFailed(out) {
 			return "", &knownIssue{issue: conformanceActiveIssue, err: fmt.Errorf("worker-conformance: %w", err)}
 		}
 		return "", fmt.Errorf("worker-conformance: %w", err)
@@ -598,8 +598,8 @@ func (r *runner) stepConformance() (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// conformanceActiveIssue: cmd/worker-conformance --active awaits the result
-// on the pre-ADR-0006 subject without the pool token.
+// conformanceActiveIssue: before fix(conformance), cmd/worker-conformance
+// --active awaited the result on the pre-ADR-0006 subject without the pool.
 const conformanceActiveIssue = "cairn-core cmd/worker-conformance --active awaits cairn.results.reconcile.<provider>.<account>; " +
 	"pools publish cairn.results.reconcile.<provider>.<pool>.<account> (ADR 0006)"
 

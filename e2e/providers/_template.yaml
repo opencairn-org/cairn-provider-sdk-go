@@ -1,9 +1,11 @@
-# Template for a provider spec: copy to <name>.yaml and fill in. Files whose
-# name starts with "_" are not run. Every ${VAR} below is expanded by the
-# harness: MOCK_URL, MOCK_ADDR, NATS_URL, CORE_URL, WORKER_NAME, WORKER_KEY,
-# RELEASE, OUT_DIR, and CHALLENGE in the webhook handshake.
+# Template for a provider spec: copy to <worker>/e2e/<name>.yaml in the worker
+# repository (run with make e2e SPEC=/abs/path/<name>.yaml) or to
+# providers/<name>.yaml here (make e2e PROVIDER=<name>). Files whose name
+# starts with "_" are not run. Every ${VAR} below is expanded by the harness:
+# MOCK_URL, MOCK_ADDR, NATS_URL, CORE_URL, WORKER_NAME, WORKER_KEY, RELEASE,
+# OUT_DIR, and CHALLENGE in the webhook handshake.
 provider: <name>                 # the provider token in every subject
-repo: ../cairn-provider-<name>   # the worker repository, relative to the SDK root
+# repo: ../cairn-provider-<name> # the worker repository; empty = the parent of this file's directory
 
 worker:
   package: ./cmd/worker-<name>
