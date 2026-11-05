@@ -20,6 +20,7 @@ capability/  the data-type taxonomy and the capability manifest
 port/        the interfaces the worker consumes (JobBus, KV, RateLimiter, typed errors)
 inmem/       in-memory bus and KV for unit tests
 sdktest/     embedded JetStream server bootstrapped like core + fake core responders, for integration tests
+e2e/         a worker and its mock against the real cairn-core (make e2e PROVIDER=<name>), one spec per provider
 proto/       the committed cairn.v1 / cairn.worker.v1 message stubs (scripts/sync-proto.sh)
 examples/    minimal: a complete worker for a fake provider, the template for new workers
 ```

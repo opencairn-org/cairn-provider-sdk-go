@@ -1,0 +1,73 @@
+# Strava worker (cairn-provider-strava) against its mock (cmd/mock-strava).
+provider: strava
+repo: ../cairn-provider-strava
+
+worker:
+  package: ./cmd/worker-strava
+  name: strava-fetcher
+  release_var: main.workerRelease
+  env:
+    # Point the API client and the OAuth endpoints at the mock.
+    CAIRN_STRAVA_API_BASE_URL: ${MOCK_URL}/api/v3
+    CAIRN_STRAVA_OAUTH_BASE_URL: ${MOCK_URL}/oauth
+    # Owning the webhook subject needs the verify secret on this instance.
+    CAIRN_STRAVA_WEBHOOK_VERIFY_TOKEN: e2e-verify
+
+mock:
+  package: ./cmd/mock-strava
+  # Seeded rides are 60 days old (outside the 30-day reconcile window), so
+  # the connect-time reconcile finds nothing and the full sync imports them.
+  # The exchange token expires inside the SDK's 60s refresh skew: the first
+  # job refreshes it, exactly once (token_refresh step).
+  args:
+    - --listen=${MOCK_ADDR}
+    - --athlete-id=4242
+    - --activities=3
+    - --seed-age=1440h
+    - --exchange-token-ttl=30s
+    - --verify-token=e2e-verify
+    - --client-id=e2e-client
+    - --client-secret=e2e-secret
+
+auth:
+  method: oauth2
+  client_id: e2e-client
+  client_secret: e2e-secret
+  label: e2e strava
+
+expect:
+  activities: 3
+  activity_type: ACTIVITY_TYPE_RIDE
+  streams: true
+  laps: true
+  gear: true
+  archive: true
+  parser_version: "1.1"
+  capabilities: [Activity, Lap, Gear]
+
+steps:
+  discover: true
+  full_sync: true
+  reconcile: true
+  webhook: true
+  webhook_verify: true
+  reparse: true
+  import_metrics: false # Strava has no health metrics
+  rate_limit: true
+  token_refresh: true
+  conformance: true
+
+webhook:
+  aspect: create
+  # Strava's subscription handshake: echo hub.challenge when the verify token matches.
+  verify_query:
+    hub.mode: subscribe
+    hub.verify_token: e2e-verify
+    hub.challenge: ${CHALLENGE}
+  verify_expect: '"hub.challenge":"${CHALLENGE}"'
+
+conformance:
+  flags: [--gear, --parse-blob=true]
+  active: true
+
+wait: 2m

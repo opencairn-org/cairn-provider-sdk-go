@@ -1,0 +1,67 @@
+# Template for a provider spec: copy to <name>.yaml and fill in. Files whose
+# name starts with "_" are not run. Every ${VAR} below is expanded by the
+# harness: MOCK_URL, MOCK_ADDR, NATS_URL, CORE_URL, WORKER_NAME, WORKER_KEY,
+# RELEASE, OUT_DIR, and CHALLENGE in the webhook handshake.
+provider: <name>                 # the provider token in every subject
+repo: ../cairn-provider-<name>   # the worker repository, relative to the SDK root
+
+worker:
+  package: ./cmd/worker-<name>
+  name: <name>-fetcher           # CAIRN_WORKER_NAME; the worker key is <name>-fetcher-<name>
+  release_var: main.workerRelease
+  env:
+    CAIRN_<NAME>_API_BASE_URL: ${MOCK_URL}        # the mock's API prefix
+    CAIRN_<NAME>_OAUTH_BASE_URL: ${MOCK_URL}/oauth
+    # CAIRN_<NAME>_WEBHOOK_SECRET: e2e-secret     # whatever makes the worker own the webhook subject
+
+mock:
+  package: ./cmd/mock-<name>
+  args:                          # the mock must bind ${MOCK_ADDR} and serve the control API (README)
+    - --listen=${MOCK_ADDR}
+    - --activities=3
+    - --seed-age=1440h           # seeded activities older than the 30-day reconcile window
+    - --exchange-token-ttl=30s   # expires inside the SDK's refresh skew → exactly one refresh
+  health_path: /_mock/healthz
+  control_path: /_mock
+
+auth:
+  method: oauth2                 # or credentials (login + secret, no authorize round-trip)
+  client_id: e2e-client          # the connect form's first field (login for credentials)
+  client_secret: e2e-secret      # the second field (secret for credentials)
+
+expect:
+  activities: 3
+  activity_type: ACTIVITY_TYPE_RIDE   # cairn.v1.ActivityType enum name, "" = any
+  streams: true                  # merged stream has channels
+  laps: true                     # GET /api/activities/{id}/laps non-empty
+  gear: false                    # manifest declares gear; connect-time import_gear creates it
+  archive: true                  # false when the provider's terms forbid raw archives (no reparse)
+  parser_version: "1.0"          # source_worker_version after a re-parse
+  capabilities: [Activity, Lap]  # data types the presence manifest must declare (capability.DataType names)
+
+steps:
+  discover: true
+  full_sync: true
+  reconcile: true
+  webhook: false                 # the mock must implement POST <control>/webhooks/emit
+  webhook_verify: false          # and the worker a GET handshake
+  reparse: true                  # needs expect.archive
+  import_metrics: false          # metric providers: the mock must implement POST <control>/metrics
+  rate_limit: true               # the mock must implement POST <control>/fail-next
+  token_refresh: true            # needs the short exchange token above
+  conformance: true
+
+webhook:
+  aspect: create
+  verify_query: {}               # the provider's handshake query, ${CHALLENGE} expands
+  verify_expect: ${CHALLENGE}    # substring the handshake body must contain
+
+metrics:
+  keys: []                       # e.g. [weight_kg, resting_hr]
+  days: 7
+
+conformance:
+  flags: []                      # --gear, --metrics, --parse-blob=false as the manifest implies
+  active: true                   # adds --active --account-id <linked account>
+
+wait: 2m                         # bound for every "wait until core shows X"

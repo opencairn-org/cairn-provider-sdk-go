@@ -32,10 +32,10 @@ MUTATION_MIN        ?= 70
 # Tools are built with this module's toolchain: golangci-lint refuses code that targets a newer Go than it was built with.
 TOOLCHAIN   := $(shell go env GOVERSION)
 
-.PHONY: help tools proto-tools proto fmt lint vet test cover audit api-compat bench mutate build check-fast check release tidy clean
+.PHONY: help tools proto-tools proto fmt lint vet test cover audit api-compat bench mutate build check-fast check release tidy clean e2e e2e-all
 
 help: ## list targets
-	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  %-12s %s\n", $$1, $$2}'
+	@grep -E '^[a-z0-9-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  %-12s %s\n", $$1, $$2}'
 
 tools: ## install the pinned Go tools the gates use (gitleaks comes from its own release)
 	GOTOOLCHAIN=$(TOOLCHAIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
@@ -55,10 +55,12 @@ proto: ## regenerate proto/ from ../cairn-core (CORE=path overrides)
 fmt: ## format in place
 	golangci-lint fmt
 
-lint: ## format check + linters + vet, warnings as errors
+lint: ## format check + linters + vet, warnings as errors (e2e/ included under its build tag)
 	golangci-lint fmt --diff
 	golangci-lint run
+	golangci-lint run --build-tags e2e ./e2e/...
 	go vet $(PKGS)
+	go vet -tags e2e ./e2e/...
 
 vet: ## go vet only
 	go vet $(PKGS)
@@ -85,6 +87,15 @@ audit: api-compat ## vulnerabilities, licenses, tidy module graph, secrets, API 
 api-compat: ## exported API vs the previous v* tag (gorelease); breaking change = bump the major
 	base=$$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo none)
 	gorelease -base="$$base"
+
+# End-to-end: a provider worker against a real cairn-core (../cairn-core, its compose dev services via
+# podman). Not part of check; see e2e/README.md. E2E_REUSE_STACK=1 skips compose up, E2E_DOWN=1 stops it after.
+e2e: ## end-to-end run of one provider spec: make e2e PROVIDER=strava
+	@test -n "$(PROVIDER)" || { echo "usage: make e2e PROVIDER=<name>  (specs: e2e/providers/*.yaml)"; exit 1; }
+	E2E_PROVIDER=$(PROVIDER) go test -tags e2e -count=1 -timeout 30m -v ./e2e
+
+e2e-all: ## end-to-end run of every spec in e2e/providers
+	E2E_PROVIDER=all go test -tags e2e -count=1 -timeout 90m -v ./e2e
 
 bench: ## benchmarks (not part of check)
 	go test -run='^$$' -bench=. -benchmem $(PKGS)

@@ -28,4 +28,18 @@ release matching the cairn-core contract it implements
 - `fitmap`: FIT and GPX files to `cairn.worker.v1.ImportedActivity`.
 - `sdktest`: embedded JetStream server bootstrapped like cairn-core plus fake
   core responders for integration tests.
+- `e2e` (build tag `e2e`, `make e2e PROVIDER=<name>` / `make e2e-all`): a
+  worker against the real cairn-core — compose dev services, a freshly built
+  core with its own database, the provider's mock and the worker binary;
+  connect, discover, full sync, reconcile, webhooks, re-parse, rate limit,
+  token refresh and `worker-conformance`, driven by a spec per provider
+  (`e2e/providers/<name>.yaml`) with a Markdown report per run.
+
+### Fixed
+- `natsbus.RateLimiter`: a deleted or purged rate-limit key (an operator's
+  `nats kv del`, a reset between test runs) kept its marker revision, so
+  the create path's compare-and-set never succeeded again and every
+  reserve of that bucket was denied with a short NAK until the bucket TTL
+  expired. The create path now goes through the KV `Create`, which steps
+  over the marker.
 - `examples/minimal`: a complete worker for a fake provider.

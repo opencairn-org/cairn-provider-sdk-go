@@ -1,0 +1,4 @@
+# binaries and process logs of a run
+/out/
+# per-run reports
+/reports/

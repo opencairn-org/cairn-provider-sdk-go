@@ -19,6 +19,8 @@ capability DataType taxonomy, Manifest
 port       JobBus, PullSubscription, KV, RateLimiter, TokenState, TerminalError, NakWithDelayError
 inmem      Bus/KV fakes with synchronous delivery
 sdktest    Core: embedded nats-server bootstrapped like core, fake responders, drive-and-await helpers
+e2e        build tag e2e: a worker + its mock against the real cairn-core (compose services, fresh
+           database, HTTP + bus assertions, worker-conformance), one spec per provider
 proto      generated cairn.v1 and cairn.worker.v1 messages
 ```
 
@@ -26,7 +28,7 @@ proto      generated cairn.v1 and cairn.worker.v1 messages
 
 - `port` is the only dependency of `workersdk`'s core logic; NATS types
   stay inside `natsbus`. A worker's unit tests run on `inmem`, its
-  integration tests on `sdktest`.
+  integration tests on `sdktest`, and `e2e` proves it against a real core.
 - The SDK owns the wire contract: subjects (`JobSubject`, `ResultSubject`,
   `LookupSubject`, `DiscoverSubject`, `OAuthExchangeSubject`, the webhook
   subjects), the JSON shapes of core's RPCs (tokens, creds, presign,
