@@ -81,10 +81,10 @@ audit: api-compat ## vulnerabilities, licenses, tidy module graph, secrets, API 
 
 # This is a library: a breaking change in a minor release is found by every worker at once, so the
 # exported API is compared with the previous release tag (fleetlint release/api-compatibility/go).
-# Before the first tag there is nothing to compare; gorelease still validates the module itself.
+# Before the first tag there is nothing to compare (-base=none); gorelease still validates the module itself.
 api-compat: ## exported API vs the previous v* tag (gorelease); breaking change = bump the major
-	base=$$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
-	if [ -n "$$base" ]; then gorelease -base="$$base"; else echo "api-compat: no previous release tag"; gorelease; fi
+	base=$$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo none)
+	gorelease -base="$$base"
 
 bench: ## benchmarks (not part of check)
 	go test -run='^$$' -bench=. -benchmem $(PKGS)
