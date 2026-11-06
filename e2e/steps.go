@@ -527,7 +527,8 @@ func (r *runner) stepRateLimit() (string, error) {
 		return "", err
 	}
 	took := time.Since(armed)
-	if err := earlyRetry(r.prov.tap.since(calls), rateLimitRetryAfter); err != nil {
+	seen, err := earlyRetry(r.prov.tap.since(calls), rateLimitRetryAfter)
+	if err != nil {
 		return "", err
 	}
 	after, err := r.prov.ctl.stats(r.ctx)
@@ -543,11 +544,13 @@ func (r *runner) stepRateLimit() (string, error) {
 	if err := r.prov.ctl.reset(r.ctx); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("activity %s imported %s after one 429 (retry-after %s)", extID, took.Round(time.Millisecond), rateLimitRetryAfter), nil
+	return fmt.Sprintf("activity %s imported %s after one 429 (retry-after %s); %s", extID, took.Round(time.Millisecond), rateLimitRetryAfter, seen), nil
 }
 
-// rateLimitRetryAfter is the Retry-After the mock sends with its 429.
-const rateLimitRetryAfter = 2 * time.Second
+// rateLimitRetryAfter is the Retry-After the mock sends with its 429: longer
+// than a JetStream redelivery takes anyway (about 5s from a NAK), so a worker
+// that NAKs without the provider's delay is told apart from one that waits.
+const rateLimitRetryAfter = 8 * time.Second
 
 // stepReconcile adds a recent activity and lowers the poll interval so the
 // scheduler's next tick reconciles the account.

@@ -97,10 +97,10 @@ func (s *statusWriter) Flush() {
 // earlyRetry checks the provider calls after the harness armed one failure:
 // the first call to start got it; no call may start before retryAfter has
 // passed since that reply. Calls already in flight when it came back are
-// concurrent, not retries.
-func earlyRetry(calls []tapCall, retryAfter time.Duration) error {
+// concurrent, not retries. It describes what it saw either way.
+func earlyRetry(calls []tapCall, retryAfter time.Duration) (string, error) {
 	if len(calls) == 0 {
-		return errors.New("the worker made no provider call after the 429 was armed")
+		return "", errors.New("the worker made no provider call after the 429 was armed")
 	}
 	failed := calls[0]
 	for _, c := range calls[1:] {
@@ -108,11 +108,20 @@ func earlyRetry(calls []tapCall, retryAfter time.Duration) error {
 			failed = c
 		}
 	}
-	for _, c := range calls {
-		if c.Start.After(failed.End) && c.Start.Sub(failed.End) < retryAfter {
-			return fmt.Errorf("%s %s %s after the failed %s %s (%d), inside its Retry-After of %s: the worker retried without waiting",
-				c.Method, c.Path, c.Start.Sub(failed.End).Round(time.Millisecond), failed.Method, failed.Path, failed.Status, retryAfter)
+	var next *tapCall
+	for i, c := range calls {
+		if c.Start.After(failed.End) && (next == nil || c.Start.Before(next.Start)) {
+			next = &calls[i]
 		}
 	}
-	return nil
+	seen := fmt.Sprintf("%s %s answered %d", failed.Method, failed.Path, failed.Status)
+	if next == nil {
+		return seen + ", no provider call after it", nil
+	}
+	gap := next.Start.Sub(failed.End)
+	seen += fmt.Sprintf(", next call %s %s %s later", next.Method, next.Path, gap.Round(time.Millisecond))
+	if gap < retryAfter {
+		return seen, fmt.Errorf("%s: inside the Retry-After of %s, the worker retried without waiting", seen, retryAfter)
+	}
+	return seen, nil
 }

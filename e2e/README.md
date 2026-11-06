@@ -112,7 +112,7 @@ databases of earlier runs), `E2E_TIMEOUT` bounds the whole run (default 25m),
     done, the activity (type, times, durations, timezone, title, summary
     except core's training load), its laps and its source stream must be
     exactly what the first parse produced.
-14. **rate limit 429** — the mock serves one 429 (`Retry-After: 2`) on the
+14. **rate limit 429** — the mock serves one 429 (`Retry-After: 8`) on the
     next API call; `POST /api/accounts/{id}/import-one` for a new activity
     must still land (the worker NAKs with delay and completes on redelivery);
     the mock counted exactly one 429, and no provider call started within

@@ -83,12 +83,12 @@ func TestEarlyRetry(t *testing.T) {
 		{"recorded out of order", []tapCall{{Path: "/v1/x", Start: at(40), End: at(50)}, failed}, true},
 	}
 	for _, c := range cases {
-		err := earlyRetry(c.calls, 2*time.Second)
+		_, err := earlyRetry(c.calls, 2*time.Second)
 		if (err != nil) != c.early {
 			t.Errorf("%s: %v; want early %v", c.name, err, c.early)
 		}
 	}
-	if err := earlyRetry(nil, time.Second); err == nil {
+	if _, err := earlyRetry(nil, time.Second); err == nil {
 		t.Error("no call after arming must fail")
 	}
 }
@@ -125,7 +125,7 @@ func TestAPITap(t *testing.T) {
 	if len(calls) != 2 || calls[0].Status != 429 || calls[0].Path != "/limited" || calls[1].Status != 200 {
 		t.Fatalf("calls = %+v", calls)
 	}
-	if err := earlyRetry(calls, 2*time.Second); err == nil {
+	if _, err := earlyRetry(calls, 2*time.Second); err == nil {
 		t.Error("an immediate second call after the 429 must count as early")
 	}
 }
