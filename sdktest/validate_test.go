@@ -82,3 +82,78 @@ func TestCheckActivities(t *testing.T) {
 		t.Errorf("reported %q; want the activity without a timezone only", rec.errs)
 	}
 }
+
+func TestValidateMetric(t *testing.T) {
+	ts := timestamppb.New(time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC))
+	num := func(v float64) *float64 { return &v }
+	valid := func(key string) *workerv1.ImportedMetric {
+		return &workerv1.ImportedMetric{
+			Ref: &workerv1.ExternalRef{UserId: "u", Provider: "acme", ExternalAccountId: "a", ExternalId: key + ":2026-05-01"},
+			Key: key, Ts: ts, ValueNumeric: num(1),
+		}
+	}
+	cases := []struct {
+		name   string
+		metric func() *workerv1.ImportedMetric
+		want   string
+	}{
+		{"health type", func() *workerv1.ImportedMetric { return valid("HRV") }, ""},
+		{"reserved key", func() *workerv1.ImportedMetric { return valid("spo2_pct") }, ""},
+		{"namespaced key", func() *workerv1.ImportedMetric { return valid("acme.recovery_score") }, ""},
+		{"struct key", func() *workerv1.ImportedMetric {
+			m := valid("sleep_stages")
+			m.ValueNumeric, m.ValueJson = nil, `{"deep":60}`
+			return m
+		}, ""},
+		{"no user", func() *workerv1.ImportedMetric { m := valid("HRV"); m.Ref.UserId = ""; return m }, "user_id"},
+		{"no account", func() *workerv1.ImportedMetric { m := valid("HRV"); m.Ref.ExternalAccountId = ""; return m }, "external_account_id"},
+		{"no external id", func() *workerv1.ImportedMetric { m := valid("HRV"); m.Ref.ExternalId = ""; return m }, "external_id"},
+		{"no ts", func() *workerv1.ImportedMetric { m := valid("HRV"); m.Ts = nil; return m }, "ts"},
+		{"no value", func() *workerv1.ImportedMetric { m := valid("HRV"); m.ValueNumeric = nil; return m }, "exactly one"},
+		{"both values", func() *workerv1.ImportedMetric { m := valid("acme.x"); m.ValueJson = `{}`; return m }, "exactly one"},
+		{"bad json", func() *workerv1.ImportedMetric {
+			m := valid("acme.x")
+			m.ValueNumeric, m.ValueJson = nil, `{`
+			return m
+		}, "not valid JSON"},
+		{"upper-case key", func() *workerv1.ImportedMetric { return valid("Spo2") }, "valid store key"},
+		{"long key", func() *workerv1.ImportedMetric { return valid("acme." + strings.Repeat("x", 60)) }, "valid store key"},
+		{"number for struct key", func() *workerv1.ImportedMetric { return valid("sleep_stages") }, "shape"},
+		{"json for reserved key", func() *workerv1.ImportedMetric {
+			m := valid("sleep_score")
+			m.ValueNumeric, m.ValueJson = nil, `80`
+			return m
+		}, "shape"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := ValidateMetric(c.metric())
+			switch {
+			case c.want == "" && err != nil:
+				t.Fatalf("unexpected error: %v", err)
+			case c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)):
+				t.Fatalf("error %v; want it to mention %q", err, c.want)
+			}
+		})
+	}
+}
+
+// checkMetrics flags refused metrics and a value sent under both homes.
+func TestCheckMetrics(t *testing.T) {
+	ts := timestamppb.New(time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC))
+	metric := func(key, extID string) *workerv1.WorkerEvent {
+		v := 1.0
+		return &workerv1.WorkerEvent{Entity: &workerv1.WorkerEvent_Metric{Metric: &workerv1.ImportedMetric{
+			Ref: &workerv1.ExternalRef{UserId: "u", ExternalAccountId: "a", ExternalId: extID}, Key: key, Ts: ts, ValueNumeric: &v,
+		}}}
+	}
+	rec := &recTB{TB: t}
+	checkMetrics(rec, &workerv1.JobResult{Events: []*workerv1.WorkerEvent{metric("HRV", "h"), metric("spo2_pct", "s"), {}}})
+	if len(rec.errs) != 0 {
+		t.Fatalf("valid metrics flagged: %v", rec.errs)
+	}
+	checkMetrics(rec, &workerv1.JobResult{Events: []*workerv1.WorkerEvent{metric("Weight", "w"), metric("weight_kg", "k"), metric("x", "")}})
+	if len(rec.errs) != 2 || !strings.Contains(strings.Join(rec.errs, "\n"), "both as Weight and as weight_kg") {
+		t.Fatalf("errors %q; want the missing external_id and the twin", rec.errs)
+	}
+}

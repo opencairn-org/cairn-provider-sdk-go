@@ -376,6 +376,7 @@ func (c *Core) decodeResult(t testing.TB, body []byte) *workerv1.JobResult {
 	ref := jr.GetPayloadRef()
 	if ref == nil {
 		checkActivities(t, &jr)
+		checkMetrics(t, &jr)
 		return &jr
 	}
 	full, ok := c.Blobs.Get(ref.GetBlobId())
@@ -387,6 +388,7 @@ func (c *Core) decodeResult(t testing.TB, body []byte) *workerv1.JobResult {
 		t.Fatalf("sdktest: claim-check body is not protojson: %v", err)
 	}
 	checkActivities(t, &resolved)
+	checkMetrics(t, &resolved)
 	return &resolved
 }
 

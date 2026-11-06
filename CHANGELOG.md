@@ -42,6 +42,11 @@ release matching the cairn-core contract it implements
   local wall-clock time next to UTC (`FromLocal`), including the half- and
   quarter-hour offsets in use.
 - `examples/minimal`: a complete worker for a fake provider.
+- `sdktest.ValidateMetric`: core's import rules for a METRIC event (user,
+  account and external_id set, a timestamp, one value, a health data type
+  or valid store key, the value shape a reserved key dictates). Results are
+  checked like activities, and a value sent both as a data type and as its
+  reserved store twin (`HRV` and `hrv_rmssd_ms`) fails the test.
 
 ### Fixed
 - `workersdk.Run`: presence and manifest are published once every job
