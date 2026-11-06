@@ -161,6 +161,31 @@ under `skip:` and marks a step that fails on a documented core defect under
 the full core, worker and mock logs next to its report. On any FAIL the
 report ends with the last 50 lines of the worker, mock and core logs.
 
+## Negative controls
+
+Every check above has been seen to fail. For each fault, a scratch git
+worktree of one worker got the fault injected and the harness ran a copy of
+that worker's spec pointing at it (`repo:` absolute). The step that must
+catch the fault failed with the message shown; "before" is the same fault
+against the harness at `c0b30b2`, before the checks it needed existed.
+
+| fault (worker) | step that fails, message | before |
+|---|---|---|
+| no timezone on the activity (wahoo) | full sync: `queue has 3 failed items …; core: 1001 after 1 attempts: invalid: initial activity invalid: activity: timezone is required` | failed, without core's reason |
+| timezone `UTC+2`, which core stores (wahoo) | activity data: `timezone "UTC+2" is not an IANA zone` | passed |
+| webhook signature not checked (whoop) | webhook forged: `forged event for … accepted: 1 fetch_source jobs, in core true; the worker does not verify the signature` | passed |
+| webhook checked with the wrong secret (whoop) | webhook event: `fetch_source reason=webhook: not reached` | failed |
+| 429 NAKed after 10ms instead of the Retry-After (concept2) | rate limit 429: `GET /api/users/me/results/1004 answered 429, next call … 5.012s later: inside the Retry-After of 8s, the worker retried without waiting` | passed |
+| no token refresher (concept2) | token refresh: `a token refresh: not reached within 30s` (discover and full sync fail too) | failed |
+| re-parse adds 100 m to the distance (concept2) | reparse: `re-parse … changed the activity: summary.avgSpeedMps: 4.7619 → 4.8810; summary.distanceM: 4000 → 4100` | passed |
+| discover not answered (concept2) | discover: `502 discover failed: … no responders`; worker-conformance: discover request/reply | failed |
+| HRV sent under a key core does not know (whoop) | import metrics: `HRV 48 not in []` | failed after the wait, without the key |
+| HRV and RestingHR swapped (whoop) | import metrics: `HRV 48 not in [… 54 from whoop …]; RestingHR 54 not in [… 48 from whoop …]` | passed |
+
+The faults live in the controls, not in this repository; to repeat one,
+`git worktree add` a worker, inject the fault named above, point a copy of its
+spec's `repo:` at the worktree and run `make e2e SPEC=<copy>`.
+
 ## Adding a provider
 
 Copy `providers/_template.yaml` to `<worker>/e2e/<name>.yaml` in the worker
