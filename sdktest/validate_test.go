@@ -1,6 +1,7 @@
 package sdktest
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -54,5 +55,30 @@ func TestValidateActivity(t *testing.T) {
 	}
 	if err := ValidateActivity(&workerv1.ImportedActivity{}); err == nil {
 		t.Fatal("missing payload accepted")
+	}
+}
+
+// recTB records the errors a check reports instead of failing the test.
+type recTB struct {
+	testing.TB
+	errs []string
+}
+
+func (r *recTB) Helper() {}
+func (r *recTB) Errorf(format string, args ...any) {
+	r.errs = append(r.errs, fmt.Sprintf(format, args...))
+}
+
+// checkActivities flags each activity core would reject and only those.
+func TestCheckActivities(t *testing.T) {
+	ok := &cairnv1.ActivitySourcePayload{Type: cairnv1.ActivityType_ACTIVITY_TYPE_RUN, Timezone: "Etc/GMT-1"}
+	bad := &cairnv1.ActivitySourcePayload{Type: cairnv1.ActivityType_ACTIVITY_TYPE_RUN}
+	activity := func(id string, p *cairnv1.ActivitySourcePayload) *workerv1.WorkerEvent {
+		return &workerv1.WorkerEvent{Entity: &workerv1.WorkerEvent_Activity{Activity: &workerv1.ImportedActivity{Ref: &workerv1.ExternalRef{ExternalId: id}, Payload: p}}}
+	}
+	rec := &recTB{TB: t}
+	checkActivities(rec, &workerv1.JobResult{Events: []*workerv1.WorkerEvent{activity("good", ok), {}, activity("no-zone", bad)}})
+	if len(rec.errs) != 1 || !strings.Contains(rec.errs[0], `"no-zone"`) || !strings.Contains(rec.errs[0], "timezone is required") {
+		t.Errorf("reported %q; want the activity without a timezone only", rec.errs)
 	}
 }

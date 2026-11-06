@@ -213,3 +213,36 @@ func TestNewRateLimiterAndRefreshLock(t *testing.T) {
 	}()
 	NewTokenCache(TokenCacheConfig{})
 }
+
+// flapKV shows the lease held to every Acquire and free to every Wait: a
+// pool where another instance takes the lease again each time it ends.
+type flapKV struct {
+	failingKV
+	gets int
+}
+
+func (k *flapKV) Get(context.Context, string) (port.KVEntry, error) {
+	k.gets++
+	if k.gets%2 == 0 {
+		return port.KVEntry{}, port.ErrKVKeyNotFound
+	}
+	v, _ := json.Marshal(map[string]any{"owner": "other", "expires_at": time.Now().Add(time.Hour)})
+	return port.KVEntry{Value: v, Revision: uint64(k.gets)}, nil
+}
+
+// A lease taken again after every wait ends the refresh after three tries
+// without refreshing.
+func TestTokenCache_RefreshLock_GivesUpAfterThreeTries(t *testing.T) {
+	bus := inmem.New()
+	srv := &tokenServer{state: port.TokenState{AccessToken: "old", RefreshToken: "r1", ExpiresAt: time.Now().Add(-time.Minute)}}
+	srv.install(t, bus)
+	kv := &flapKV{}
+	auth := &stubAuth{}
+	w := mustNew(t, Config{Name: "n", Provider: "p", Bus: bus, Auth: auth, RefreshLock: &kvlock.Lock{KV: kv, Owner: "me", PollInterval: time.Millisecond}, Logger: quietLogger()})
+	if _, err := w.FetchToken(context.Background(), "acc"); err == nil || !strings.Contains(err.Error(), "stays held") {
+		t.Fatalf("FetchToken = %v; want the lease to stay held", err)
+	}
+	if kv.gets != 5 || auth.Calls != 0 {
+		t.Errorf("%d lease reads (3 acquires, 2 waits), %d refreshes; want 5 and 0", kv.gets, auth.Calls)
+	}
+}

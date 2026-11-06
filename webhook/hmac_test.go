@@ -63,6 +63,10 @@ func TestFreshTimestamp(t *testing.T) {
 		"1767268740":    true,  // 60s ago
 		"1767268800000": true,  // milliseconds
 		"1767268000":    false, // 13 minutes ago
+		"1767268500":    true,  // exactly the skew
+		"1767268860":    true,  // 60s ahead (clock drift)
+		"1767269600":    false, // 13 minutes ahead
+		"1767269600000": false, // 13 minutes ahead, milliseconds
 		"abc":           false,
 		"":              false,
 	}

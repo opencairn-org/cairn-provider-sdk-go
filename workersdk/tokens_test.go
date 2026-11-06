@@ -140,3 +140,25 @@ func TestMapReplyError(t *testing.T) {
 		t.Errorf("unknown: %v", err)
 	}
 }
+
+// A token inside the refresh skew is refreshed before use; one outside it is not.
+func TestTokenCache_RefreshSkew(t *testing.T) {
+	for _, c := range []struct {
+		expiresIn time.Duration
+		refreshed bool
+	}{{30 * time.Second, true}, {90 * time.Second, false}} {
+		bus := inmem.New()
+		_, _ = bus.RespondTo(context.Background(), "cairn.tokens.p.get", func(context.Context, []byte) ([]byte, error) {
+			return json.Marshal(tokenGetReply{AccessToken: "cur", RefreshToken: "r", ExpiresAt: time.Now().Add(c.expiresIn)})
+		})
+		_, _ = bus.RespondTo(context.Background(), "cairn.tokens.p.store", func(context.Context, []byte) ([]byte, error) {
+			return []byte(`{"ok":true}`), nil
+		})
+		auth := &stubAuth{NextState: port.TokenState{AccessToken: "new", ExpiresAt: time.Now().Add(time.Hour)}}
+		w := mustNew(t, Config{Name: "n", Provider: "p", Bus: bus, Auth: auth})
+		tok, err := w.FetchToken(context.Background(), "acc")
+		if err != nil || (auth.Calls == 1) != c.refreshed || (tok.AccessToken == "new") != c.refreshed {
+			t.Errorf("token expiring in %v: %+v, %v, %d refreshes; want refreshed %v", c.expiresIn, tok, err, auth.Calls, c.refreshed)
+		}
+	}
+}

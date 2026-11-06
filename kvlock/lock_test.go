@@ -3,6 +3,7 @@ package kvlock
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -188,5 +189,36 @@ func TestKVErrorsSurface(t *testing.T) {
 	}
 	if l.key("n") != "lock.n" || (&Lock{Prefix: "p."}).key("n") != "p.n" || l.ttl() != 30*time.Second {
 		t.Error("defaults")
+	}
+}
+
+// releaseFailKV grants the lease, then fails the release write.
+type releaseFailKV struct {
+	port.KV
+	acquired bool
+}
+
+func (k *releaseFailKV) CompareAndSet(ctx context.Context, key string, v []byte, rev uint64) (uint64, bool, error) {
+	if k.acquired {
+		return 0, false, errors.New("release lost")
+	}
+	k.acquired = true
+	return k.KV.CompareAndSet(ctx, key, v, rev)
+}
+
+// A failed release surfaces when fn succeeded; fn's own error wins otherwise.
+func TestDoReleaseErrorPrecedence(t *testing.T) {
+	ctx := context.Background()
+	fnErr := errors.New("refresh failed")
+	for _, c := range []struct {
+		fn   error
+		want string
+	}{{nil, "release lost"}, {fnErr, "refresh failed"}} {
+		_, kv := newLock(t)
+		l := &Lock{KV: &releaseFailKV{KV: kv}, Owner: "a", TTL: time.Minute}
+		err := l.Do(ctx, "x", func(context.Context) error { return c.fn })
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("Do with fn error %v = %v; want %q", c.fn, err, c.want)
+		}
 	}
 }

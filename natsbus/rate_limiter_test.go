@@ -265,6 +265,9 @@ func TestSyncUsage_OverridesCapacityAndUsage(t *testing.T) {
 	if err := rl.SyncUsage(ctx, "strava:short", 0, 0, reset); err != nil {
 		t.Fatalf("zero limit: %v", err)
 	}
+	if ok, _, _ := rl.Reserve(ctx, "strava:short", 1); !ok {
+		t.Fatal("a sync without a limit must leave the bucket alone")
+	}
 	if err := rl.SyncUsage(ctx, "strava:short", -3, 2, reset); err != nil {
 		t.Fatal(err)
 	}
@@ -386,5 +389,58 @@ func TestRateLimiter_ExplicitWindows(t *testing.T) {
 		if got := windowFor("x:" + suffix); got != want {
 			t.Errorf("windowFor %s = %v", suffix, got)
 		}
+	}
+}
+
+// ForceRefill leaves exactly `available` tokens in the window and keeps the
+// configured capacity for the windows after it.
+func TestForceRefill_PartialAvailabilityThenConfiguredCapacity(t *testing.T) {
+	rl := newTestLimiter(t, map[string]int{"acme:minute": 5})
+	var clock atomicTime
+	clock.Set(time.Date(2026, 5, 18, 12, 0, 0, 0, time.UTC))
+	rl.now = clock.Get
+	ctx := context.Background()
+
+	if err := rl.ForceRefill(ctx, "acme:minute", 2, clock.Get().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if ok, _, _ := rl.Reserve(ctx, "acme:minute", 1); !ok {
+			t.Fatalf("reserve %d of the 2 available denied", i)
+		}
+	}
+	if ok, _, _ := rl.Reserve(ctx, "acme:minute", 1); ok {
+		t.Fatal("third reserve granted with 2 available")
+	}
+	clock.Set(clock.Get().Add(61 * time.Second))
+	for i := 0; i < 5; i++ {
+		if ok, _, _ := rl.Reserve(ctx, "acme:minute", 1); !ok {
+			t.Fatalf("next window: reserve %d of capacity 5 denied", i)
+		}
+	}
+}
+
+// loseKV reads empty and loses every compare-and-set.
+type loseKV struct{ casFailKV }
+
+func (loseKV) CompareAndSet(context.Context, string, []byte, uint64) (uint64, bool, error) {
+	return 0, false, nil
+}
+
+// Persistent contention ends after the attempt ceiling with a short delay,
+// backing off between attempts (never before the first).
+func TestReserve_PersistentContentionGivesUp(t *testing.T) {
+	rl := NewRateLimiter(loseKV{}, map[string]int{"acme:minute": 5})
+	sleeps := 0
+	rl.sleep = func(time.Duration) { sleeps++ }
+	ok, retry, err := rl.Reserve(context.Background(), "acme:minute", 1)
+	if ok || err != nil {
+		t.Fatalf("Reserve = %v, %v; want a soft denial", ok, err)
+	}
+	if retry < 50*time.Millisecond || retry > 70*time.Millisecond {
+		t.Errorf("retry after %v; want 50ms plus at most 20ms jitter", retry)
+	}
+	if sleeps != 199 {
+		t.Errorf("%d backoffs for 200 attempts; want 199", sleeps)
 	}
 }
