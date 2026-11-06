@@ -47,6 +47,10 @@ release matching the cairn-core contract it implements
   or valid store key, the value shape a reserved key dictates). Results are
   checked like activities, and a value sent both as a data type and as its
   reserved store twin (`HRV` and `hrv_rmssd_ms`) fails the test.
+- `e2e`: the `metrics store` step (`metrics.store_keys`) finds each key in
+  core's metrics store with the worker's provenance and its own
+  external_id, fails on any metric core refused, and checks that a second
+  import updates the rows instead of adding new ones.
 
 ### Fixed
 - `workersdk.Run`: presence and manifest are published once every job
@@ -74,6 +78,10 @@ release matching the cairn-core contract it implements
   distinct value per data type and finds each, from the provider, in its
   own series. A failed import reports core's `last_error` and ends the wait
   at once.
+- `e2e`: binaries and process logs go to the user cache directory
+  (`E2E_OUT_DIR` overrides) instead of `e2e/out`: gorelease zips ignored
+  files as well, and `make check` failed once a few runs' output passed its
+  500 MB module limit.
 - `e2e`: the import-metrics step reads core's health series (`GET
   /api/health`), where worker METRIC events land, instead of `/api/metrics`.
 - `natsbus.RateLimiter`: a deleted or purged rate-limit key (an operator's

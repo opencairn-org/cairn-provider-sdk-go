@@ -56,10 +56,18 @@ type runner struct {
 	results []stepResult
 	aborted string
 	started time.Time
+	// coreLogFrom is core.log's size when this run started; core is shared by the specs of one test.
+	coreLogFrom int64
+	// storeSeeded counts the store keys the mock let the harness seed.
+	storeSeeded int
 }
 
 func newRunner(ctx context.Context, t *testing.T, spec *Spec, stack *Stack) *runner {
-	return &runner{t: t, ctx: ctx, spec: spec, stack: stack, core: newCoreClient(stack.CoreURL), prov: newProviderRun(spec, stack), started: time.Now()}
+	r := &runner{t: t, ctx: ctx, spec: spec, stack: stack, core: newCoreClient(stack.CoreURL), prov: newProviderRun(spec, stack), started: time.Now()}
+	if fi, err := os.Stat(stack.coreLog()); err == nil {
+		r.coreLogFrom = fi.Size()
+	}
+	return r
 }
 
 // step runs fn when enabled and records the outcome; it returns true on pass.
@@ -148,7 +156,7 @@ func (r *runner) writeReport() (string, error) {
 // next queued run overwrites the ones in out/.
 func (r *runner) keepLogs(base string) {
 	for name, src := range map[string]string{
-		"core":   filepath.Join(r.stack.OutDir, "core.log"),
+		"core":   r.stack.coreLog(),
 		"worker": filepath.Join(r.prov.outDir(), "worker.log"),
 		"mock":   filepath.Join(r.prov.outDir(), "mock.log"),
 	} {

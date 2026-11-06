@@ -27,7 +27,9 @@ streams, so the Makefile wraps every run in `flock /tmp/cairn-e2e.lock`
 (`E2E_LOCK` overrides the path): concurrent `make e2e` invocations queue
 behind each other instead of clobbering a running one. Reports go to the
 SDK's `e2e/reports/<provider>-<timestamp>.md` (gitignored), binaries and
-process logs to `e2e/out/<provider>/`.
+process logs to `~/.cache/cairn-provider-sdk-go/e2e/<provider>/`
+(`E2E_OUT_DIR` overrides; outside the module, which gorelease would
+otherwise zip). A failed run copies its logs next to its report.
 
 The package is behind the `e2e` build tag: `make check` lints it
 (`--build-tags e2e`) but does not run it.
@@ -142,12 +144,25 @@ databases of earlier runs), `E2E_TIMEOUT` bounds the whole run (default 25m),
     core's daily series (`GET /api/health?type=<key>`) must hold each seeded
     value, from the provider, under its own data type (the values differ
     per key, so a sample filed under another type is caught).
-20. **token refresh** — the mock issues the exchange token with an
+20. **metrics store** (`metrics.store_keys`) — before the import, step 19
+    seeds each store key through `POST /_mock/metrics` on a day the health
+    keys leave alone (a 400 means the mock serves that key from its own
+    data). Every store key must then have a row in core's metrics store (`GET /api/metrics`,
+    filtered by the linked account) carrying the worker's provider, account,
+    worker name and an `external_id` of its own (not core's
+    `derived:<key>@<ts>`); `sleep_stages` must hold a structured value. Core
+    must have refused no metric of this worker (its `worker metric refused`
+    log lines). A second `import_metrics` follows; once core's
+    `ingest-router` consumer has acked it, the rows must be the same ones
+    (an upsert, not new rows). Keys stored but not listed are named in the
+    report. Before core's `fix(ingest)` (no `metrics.RouteImport` in its
+    checkout) core dropped these keys and the step is reported as **XFAIL**.
+21. **token refresh** — the mock issues the exchange token with an
     `expires_in` inside the SDK's 60s refresh skew, so the first job
     refreshed it through `cairn.tokens.<provider>.store`; the mock must count
     exactly one refresh and no 401 for the whole run (the stale token was
     never sent, the refreshed one was cached and persisted).
-21. **worker-conformance** — `go run ./cmd/worker-conformance --nats …
+22. **worker-conformance** — `go run ./cmd/worker-conformance --nats …
     --provider … --worker-name … <flags> [--active --account-id …]` in
     cairn-core exits 0 (output in the report). A core whose tool still
     awaits the pre-pool subject `cairn.results.reconcile.<provider>.<account>`
@@ -167,7 +182,8 @@ Every check above has been seen to fail. For each fault, a scratch git
 worktree of one worker got the fault injected and the harness ran a copy of
 that worker's spec pointing at it (`repo:` absolute). The step that must
 catch the fault failed with the message shown; "before" is the same fault
-against the harness at `c0b30b2`, before the checks it needed existed.
+against the harness at `c0b30b2`, before the checks it needed existed (the
+metrics-store rows: before the step existed).
 
 | fault (worker) | step that fails, message | before |
 |---|---|---|
@@ -181,6 +197,8 @@ against the harness at `c0b30b2`, before the checks it needed existed.
 | discover not answered (concept2) | discover: `502 discover failed: … no responders`; worker-conformance: discover request/reply | failed |
 | HRV sent under a key core does not know (whoop) | import metrics: `HRV 48 not in []` | failed after the wait, without the key |
 | HRV and RestingHR swapped (whoop) | import metrics: `HRV 48 not in [… 54 from whoop …]; RestingHR 54 not in [… 48 from whoop …]` | passed |
+| metric external_id changes on every import (whoop) | metrics store: `re-import added 77 rows instead of updating: sleep_light_min@2026-11-01T07:00:00Z (sleep:…:sleep_light_min:1793961566112009548); …` | no store check |
+| `spo2_pct` sent as `SpO2`, which core refuses (whoop) | metrics store: `core refused SpO2: invalid_key (×5)` at the first poll | no store check |
 
 The faults live in the controls, not in this repository; to repeat one,
 `git worktree add` a worker, inject the fault named above, point a copy of its
@@ -209,7 +227,7 @@ repository needs a standalone mock, `cmd/mock-<name>`, that:
 | `POST /_mock/activities` | `{"name","start":RFC3339,"streams":bool}` | adds an activity → `{"id":"<external id>"}` |
 | `POST /_mock/webhooks/emit` | `{"url","aspect","activity_id","forge"}` | POSTs the provider's (signed) event for that activity to `url` → `{"status","body"}`; `forge: true` signs it with a wrong secret or token |
 | `POST /_mock/fail-next` | `{"status","count","retry_after"}` | the next `count` API calls answer `status` (429 with `Retry-After`) |
-| `POST /_mock/metrics` | `{"key","ts","value"}` | seeds a metric sample (metric providers); `key` is a core data type (`Steps`, `HRV`, `RestingHR`, `Sleep`, `Weight`) and `value` is in core's unit for it (the harness seeds plausible values: 27000 s of sleep, 48 ms HRV, 54 bpm, 8123 steps, 72 kg), so the step finds it unchanged in `GET /api/health?type=<key>` |
+| `POST /_mock/metrics` | `{"key","ts","value"}` | seeds a metric sample (metric providers); `key` is a core data type (`Steps`, `HRV`, `RestingHR`, `Sleep`, `Weight`) and `value` is in core's unit for it (the harness seeds plausible values: 27000 s of sleep, 48 ms HRV, 54 bpm, 8123 steps, 72 kg), so the step finds it unchanged in `GET /api/health?type=<key>`; a mock that can also seed `metrics.store_keys` accepts them here (any value in range for the key's unit) and answers 400 for a key it cannot seed |
 | `POST /_mock/reset` | | clears injected failures |
 
 The harness binds every mock (and the API tap the worker reaches it

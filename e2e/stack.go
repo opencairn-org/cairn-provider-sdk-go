@@ -50,6 +50,9 @@ type Stack struct {
 	// FixConformanceActive is true when core's worker-conformance awaits the
 	// reconcile result on the pool's subject (ADR 0006).
 	FixConformanceActive bool
+	// FixMetricsStore is true when core files non-data-type METRIC keys in
+	// its metrics store instead of dropping them.
+	FixMetricsStore bool
 	// Admin is the bootstrap admin the harness logs in as.
 	AdminEmail    string
 	AdminPassword string
@@ -59,12 +62,24 @@ type Stack struct {
 	log  func(format string, args ...any)
 }
 
+// defaultOutDir is outside the module: gorelease zips ignored files too and
+// refuses a module over 500 MB, which a few runs' binaries exceed.
+func defaultOutDir() string {
+	if cache, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(cache, "cairn-provider-sdk-go", "e2e")
+	}
+	return filepath.Join(os.TempDir(), "cairn-provider-sdk-go-e2e")
+}
+
+// coreLog is the log of the core server the stack started.
+func (s *Stack) coreLog() string { return filepath.Join(s.OutDir, "core.log") }
+
 // NewStack resolves paths from the SDK root (the e2e package's parent).
 func NewStack(sdkRoot string, logf func(string, ...any)) *Stack {
 	coreRoot := envOr("E2E_CORE_DIR", filepath.Join(sdkRoot, "..", "cairn-core"))
 	return &Stack{
 		SDKRoot: sdkRoot, CoreRoot: coreRoot,
-		OutDir:        filepath.Join(sdkRoot, "e2e", "out"),
+		OutDir:        envOr("E2E_OUT_DIR", defaultOutDir()),
 		NATSURL:       envOr("E2E_NATS_URL", natsURL),
 		AdminEmail:    envOr("E2E_ADMIN_EMAIL", "admin@e2e.local"),
 		AdminPassword: envOr("E2E_ADMIN_PASSWORD", "e2e-admin-password-1"),
@@ -206,6 +221,8 @@ func (s *Stack) buildCore(ctx context.Context) error {
 	s.FixWebhookVerify = err == nil
 	tool, _ := os.ReadFile(filepath.Join(s.CoreRoot, "cmd", "worker-conformance", "main.go")) //nolint:gosec // G304: core's checkout
 	s.FixConformanceActive = !strings.Contains(string(tool), conformanceOldSubject)
+	route, _ := os.ReadFile(filepath.Join(s.CoreRoot, "internal", "usecase", "metrics", "import.go")) //nolint:gosec // G304: core's checkout
+	s.FixMetricsStore = strings.Contains(string(route), "func RouteImport")
 	s.log("building core %s (%s@%s)", s.Release, s.CoreBranch, s.CoreCommit)
 	_, err = run(ctx, s.CoreRoot, map[string]string{"CGO_ENABLED": "0"}, "go", "build", "-trimpath",
 		"-ldflags", "-X main.Version="+s.Release, "-o", filepath.Join(s.OutDir, "cairn"), "./cmd/server")

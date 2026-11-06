@@ -131,11 +131,13 @@ type WebhookSpec struct {
 
 // MetricsSpec drives import_metrics for metric providers.
 type MetricsSpec struct {
-	// Keys are core data types (Steps, HRV, RestingHR, Sleep, Weight) that
-	// must show up in GET /api/health after the import; core drops METRIC
-	// events whose key is not such a data type.
+	// Keys are core data types (Steps, HRV, RestingHR, Sleep, Weight) whose
+	// seeded sample must show up in GET /api/health after the import.
 	Keys []string `yaml:"keys"`
-	Days int      `yaml:"days"`
+	// StoreKeys are the other keys the worker sends; each must land in core's
+	// metrics store (GET /api/metrics) with the worker's provenance.
+	StoreKeys []string `yaml:"store_keys"`
+	Days      int      `yaml:"days"`
 }
 
 // ConformanceSpec configures cairn-core's worker-conformance run.

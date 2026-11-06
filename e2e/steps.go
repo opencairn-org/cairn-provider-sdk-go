@@ -24,7 +24,7 @@ const pollNever = 86400
 var stepNames = []string{
 	"build worker+mock", "core release", "admin login", "mock up", "worker presence", "connect account",
 	"reconcile on connect", "gear on connect", "discover", "full sync", "activity data", "reparse",
-	"rate limit 429", "reconcile", "webhook event", "webhook forged", "webhook verify", "import metrics", "token refresh",
+	"rate limit 429", "reconcile", "webhook event", "webhook forged", "webhook verify", "import metrics", "metrics store", "token refresh",
 	"worker-conformance",
 }
 
@@ -48,6 +48,7 @@ func (r *runner) runAll() {
 	r.step("webhook forged", r.spec.Steps.WebhookForged, r.stepWebhookForged)
 	r.stepWith("webhook verify", r.spec.Steps.WebhookVerify, r.verifyKnownIssue(), r.stepWebhookVerify)
 	r.step("import metrics", r.spec.Steps.ImportMetrics, r.stepImportMetrics)
+	r.stepWith("metrics store", r.spec.Steps.ImportMetrics && len(r.spec.Metrics.StoreKeys) > 0, r.storeKnownIssue(), r.stepMetricsStore)
 	r.step("token refresh", r.spec.Steps.TokenRefresh, r.stepTokenRefresh)
 	r.step("worker-conformance", r.spec.Steps.Conformance, r.stepConformance)
 }
@@ -681,6 +682,9 @@ func (r *runner) stepImportMetrics() (string, error) {
 		if err := r.prov.ctl.addMetric(r.ctx, key, time.Now().Add(-time.Duration(i+1)*24*time.Hour), metricValue(key, i)); err != nil {
 			return "", err
 		}
+	}
+	if err := r.seedStoreKeys(); err != nil {
+		return "", err
 	}
 	mark := r.stack.bus.Mark()
 	if err := r.core.importHealth(r.ctx, r.acct.ID, r.spec.Metrics.Days); err != nil {

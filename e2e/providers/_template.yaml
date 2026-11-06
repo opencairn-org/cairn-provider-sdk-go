@@ -60,6 +60,7 @@ webhook:
 
 metrics:
   keys: []                       # core data types, e.g. [Weight, RestingHR]; checked in GET /api/health
+  store_keys: []                 # every other key the worker sends, e.g. [spo2_pct, acme.recovery_score]; checked in GET /api/metrics
   days: 7
 
 skip: {}                         # why a disabled step does not apply, e.g. {"gear on connect": "no gear"}
