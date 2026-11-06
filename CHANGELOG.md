@@ -8,6 +8,12 @@ release matching the cairn-core contract it implements
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-11-06
+
+First release, extracted from cairn-provider-strava 0.7.0. Implements the
+cairn-core 0.7 worker contract and is released in lockstep with cairn-core
+0.7.1; cairn-provider-strava 0.7.1 is built on it.
+
 ### Added
 - Initial extraction of the provider-agnostic worker code from
   cairn-provider-strava 0.7.0: `workersdk` (worker loop, presence, manifest,
