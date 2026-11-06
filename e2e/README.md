@@ -184,7 +184,7 @@ repository needs a standalone mock, `cmd/mock-<name>`, that:
 | `POST /_mock/activities` | `{"name","start":RFC3339,"streams":bool}` | adds an activity → `{"id":"<external id>"}` |
 | `POST /_mock/webhooks/emit` | `{"url","aspect","activity_id","forge"}` | POSTs the provider's (signed) event for that activity to `url` → `{"status","body"}`; `forge: true` signs it with a wrong secret or token |
 | `POST /_mock/fail-next` | `{"status","count","retry_after"}` | the next `count` API calls answer `status` (429 with `Retry-After`) |
-| `POST /_mock/metrics` | `{"key","ts","value"}` | seeds a metric sample (metric providers); `key` is a core data type (`Steps`, `HRV`, `RestingHR`, `Sleep`, `Weight`) and `value` is in core's unit for it, so the step finds it unchanged in `GET /api/health?type=<key>` |
+| `POST /_mock/metrics` | `{"key","ts","value"}` | seeds a metric sample (metric providers); `key` is a core data type (`Steps`, `HRV`, `RestingHR`, `Sleep`, `Weight`) and `value` is in core's unit for it (the harness seeds plausible values: 27000 s of sleep, 48 ms HRV, 54 bpm, 8123 steps, 72 kg), so the step finds it unchanged in `GET /api/health?type=<key>` |
 | `POST /_mock/reset` | | clears injected failures |
 
 The harness binds every mock (and the API tap the worker reaches it

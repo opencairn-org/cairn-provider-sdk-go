@@ -145,8 +145,16 @@ func TestSeededValue(t *testing.T) {
 	case seededValue(nil, "whoop", 73):
 		t.Error("an empty series has no sample")
 	}
-	if metricValue(0) == metricValue(1) {
-		t.Error("seeded values must differ per data type")
+	seen := map[float64]string{}
+	for i, key := range []string{"Sleep", "HRV", "RestingHR", "Steps", "Weight", "SpO2"} {
+		v := metricValue(key, i)
+		if other, dup := seen[v]; dup {
+			t.Errorf("%s and %s are seeded with the same value %v", key, other, v)
+		}
+		seen[v] = key
+	}
+	if int(metricValue("Sleep", 0))%60 != 0 {
+		t.Error("sleep must be whole minutes: some providers record no seconds")
 	}
 	if s := describeRows(rows[:1]); s != "[2026-11-04 73ms from whoop]" {
 		t.Errorf("describeRows = %s", s)

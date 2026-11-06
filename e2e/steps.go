@@ -675,7 +675,7 @@ func (r *runner) stepWebhookVerify() (string, error) {
 // stepImportMetrics seeds samples on the mock and triggers import_metrics.
 func (r *runner) stepImportMetrics() (string, error) {
 	for i, key := range r.spec.Metrics.Keys {
-		if err := r.prov.ctl.addMetric(r.ctx, key, time.Now().Add(-time.Duration(i+1)*24*time.Hour), metricValue(i)); err != nil {
+		if err := r.prov.ctl.addMetric(r.ctx, key, time.Now().Add(-time.Duration(i+1)*24*time.Hour), metricValue(key, i)); err != nil {
 			return "", err
 		}
 	}
@@ -711,16 +711,25 @@ func (r *runner) stepImportMetrics() (string, error) {
 func (r *runner) missingSamples(got map[string][]map[string]any) []string {
 	var out []string
 	for i, key := range r.spec.Metrics.Keys {
-		if !seededValue(got[key], r.spec.Provider, metricValue(i)) {
-			out = append(out, fmt.Sprintf("%s %v not in %s", key, metricValue(i), describeRows(got[key])))
+		if want := metricValue(key, i); !seededValue(got[key], r.spec.Provider, want) {
+			out = append(out, fmt.Sprintf("%s %v not in %s", key, want, describeRows(got[key])))
 		}
 	}
 	return out
 }
 
-// metricValue is the value seeded for the i-th key: distinct per key, so a
-// sample filed under the wrong data type is told apart.
-func metricValue(i int) float64 { return 70 + 3*float64(i) }
+// seededValues are plausible samples in core's units, distinct per data
+// type (a sample filed under another type is told apart) and representable
+// at every provider's resolution (whole minutes of sleep, whole bpm, grams).
+var seededValues = map[string]float64{"Sleep": 27000, "HRV": 48, "RestingHR": 54, "Steps": 8123, "Weight": 72}
+
+// metricValue is the value seeded for the i-th key of the spec.
+func metricValue(key string, i int) float64 {
+	if v, ok := seededValues[key]; ok {
+		return v
+	}
+	return 70 + 3*float64(i)
+}
 
 // stepTokenRefresh: the mock's exchange token expires inside the SDK's
 // refresh skew, so the first job refreshed it; exactly once for the whole
