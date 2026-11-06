@@ -392,12 +392,14 @@ func (c *coreClient) listGear(ctx context.Context) ([]gear, error) {
 }
 
 // metrics lists stored metric samples for keys.
-func (c *coreClient) metrics(ctx context.Context, keys []string) ([]map[string]any, error) {
+// healthSeries is core's merged daily series for one data type; worker METRIC
+// events land in health_samples, which /api/metrics does not read.
+func (c *coreClient) healthSeries(ctx context.Context, dataType string, days int) ([]map[string]any, error) {
 	var out struct {
-		Metrics []map[string]any `json:"metrics"`
+		Series []map[string]any `json:"series"`
 	}
-	err := c.get(ctx, "/api/metrics?limit=500&keys="+url.QueryEscape(strings.Join(keys, ",")), &out)
-	return out.Metrics, err
+	err := c.get(ctx, fmt.Sprintf("/api/health?type=%s&days=%d", url.QueryEscape(dataType), days), &out)
+	return out.Series, err
 }
 
 // --- admin fleet ---

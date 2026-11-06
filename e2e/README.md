@@ -166,7 +166,7 @@ repository needs a standalone mock, `cmd/mock-<name>`, that:
 | `POST /_mock/activities` | `{"name","start":RFC3339,"streams":bool}` | adds an activity → `{"id":"<external id>"}` |
 | `POST /_mock/webhooks/emit` | `{"url","aspect","activity_id"}` | POSTs the provider's (signed) event for that activity to `url` → `{"status","body"}` |
 | `POST /_mock/fail-next` | `{"status","count","retry_after"}` | the next `count` API calls answer `status` (429 with `Retry-After`) |
-| `POST /_mock/metrics` | `{"key","ts","value"}` | seeds a metric sample (metric providers) |
+| `POST /_mock/metrics` | `{"key","ts","value"}` | seeds a metric sample (metric providers); `key` is a core data type (`Steps`, `HRV`, `RestingHR`, `Sleep`, `Weight`), and the step checks `GET /api/health?type=<key>` |
 | `POST /_mock/reset` | | clears injected failures |
 
 The harness binds every mock on `127.0.0.1` and hands the worker

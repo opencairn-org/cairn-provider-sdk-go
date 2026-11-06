@@ -121,7 +121,9 @@ type WebhookSpec struct {
 
 // MetricsSpec drives import_metrics for metric providers.
 type MetricsSpec struct {
-	// Keys are metric keys that must show up after the import.
+	// Keys are core data types (Steps, HRV, RestingHR, Sleep, Weight) that
+	// must show up in GET /api/health after the import; core drops METRIC
+	// events whose key is not such a data type.
 	Keys []string `yaml:"keys"`
 	Days int      `yaml:"days"`
 }

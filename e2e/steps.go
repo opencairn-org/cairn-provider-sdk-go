@@ -545,16 +545,23 @@ func (r *runner) stepImportMetrics() (string, error) {
 	if _, err := r.stack.bus.WaitFor(r.ctx, r.spec.Wait, "import_metrics job", mark, onSubject(r.jobSubject("import_metrics"))); err != nil {
 		return "", err
 	}
-	var n int
-	err := waitUntil(r.ctx, r.spec.Wait, "metrics stored", func() (bool, error) {
-		rows, err := r.core.metrics(r.ctx, r.spec.Metrics.Keys)
-		if err != nil {
-			return false, err
+	got := map[string]int{}
+	err := waitUntil(r.ctx, r.spec.Wait, "health samples stored", func() (bool, error) {
+		for _, key := range r.spec.Metrics.Keys {
+			rows, err := r.core.healthSeries(r.ctx, key, r.spec.Metrics.Days+1)
+			if err != nil {
+				return false, err
+			}
+			got[key] = len(rows)
 		}
-		n = len(rows)
-		return n >= len(r.spec.Metrics.Keys), nil
+		for _, key := range r.spec.Metrics.Keys {
+			if got[key] == 0 {
+				return false, nil
+			}
+		}
+		return true, nil
 	})
-	return fmt.Sprintf("%d samples for %v", n, r.spec.Metrics.Keys), err
+	return fmt.Sprintf("daily samples per data type %v", got), err
 }
 
 // stepTokenRefresh: the mock's exchange token expires inside the SDK's
