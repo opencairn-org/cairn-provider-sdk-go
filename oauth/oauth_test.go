@@ -89,6 +89,11 @@ func TestRefresher(t *testing.T) {
 	if te.lastForm.Get("client_id") != "cid" || te.lastForm.Get("client_secret") != "csec" || te.lastAuth != "" {
 		t.Errorf("body auth form=%v auth=%q", te.lastForm, te.lastAuth)
 	}
+	// No expires_in and no DefaultExpiry: an hour, never an already-stale token.
+	r.DefaultExpiry = 0
+	if got, err = r.Refresh(ctx, cur, creds); err != nil || time.Until(got.ExpiresAt) < 59*time.Minute {
+		t.Errorf("default expiry = %+v, %v", got, err)
+	}
 	if ScopeString([]string{"a", "b"}) != "a b" {
 		t.Error("ScopeString")
 	}
@@ -201,9 +206,11 @@ func TestExchanger(t *testing.T) {
 	if got = ex.Exchange(ctx, req); got.Error != "exchange_failed" || got.Message != "exchange_failed" {
 		t.Errorf("odd 4xx = %+v", got)
 	}
-	te.status, te.body = 503, ``
-	if got = ex.Exchange(ctx, req); got.Error != "transient" {
-		t.Errorf("5xx = %+v", got)
+	for _, status := range []int{500, 503} {
+		te.status, te.body = status, ``
+		if got = ex.Exchange(ctx, req); got.Error != "transient" {
+			t.Errorf("%d = %+v", status, got)
+		}
 	}
 	ex.Endpoint.TokenURL = "http://127.0.0.1:1"
 	if got = ex.Exchange(ctx, req); got.Error != "transient" {

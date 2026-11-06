@@ -405,3 +405,21 @@ func TestHelpers(t *testing.T) {
 		t.Error("unused")
 	}
 }
+
+// Elevation counts a climb or descent once it reaches 5 m from the last
+// anchor; smaller wobbles are noise.
+func TestElevationGainLoss(t *testing.T) {
+	for _, c := range []struct {
+		alt        []float64
+		gain, loss float64
+	}{
+		{[]float64{100, 104, 100, 104}, 0, 0},
+		{[]float64{100, 105, 110, 105, 100}, 10, 10},
+		{[]float64{100, 103, 106, 101, 95}, 6, 11},
+		{[]float64{100}, 0, 0},
+	} {
+		if gain, loss := elevationGainLoss(c.alt); gain != c.gain || loss != c.loss {
+			t.Errorf("elevationGainLoss(%v) = %v, %v; want %v, %v", c.alt, gain, loss, c.gain, c.loss)
+		}
+	}
+}
