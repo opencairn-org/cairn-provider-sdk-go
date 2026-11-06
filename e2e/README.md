@@ -67,7 +67,9 @@ databases of earlier runs), `E2E_TIMEOUT` bounds the whole run (default 25m),
 4. **admin login** — `POST /auth/password` as the bootstrap admin, then
    `POST /auth/password/required` to replace the one-time password; the
    session cookie authenticates everything after.
-5. **mock up** — the mock binds `${MOCK_ADDR}` and answers its health route.
+5. **mock up** — the mock binds `${MOCK_ADDR}` and answers its health route;
+   `${MOCK_URL}` is the harness's API tap, a reverse proxy in front of the
+   mock that timestamps every call the worker makes to the "provider".
 6. **worker presence** — the heartbeat in `cairn_worker_presence` carries the
    release, the worker key and the expected capabilities; `GET
    /api/admin/workers` shows the pool online and compatible and `GET
@@ -112,9 +114,9 @@ databases of earlier runs), `E2E_TIMEOUT` bounds the whole run (default 25m),
     exactly what the first parse produced.
 14. **rate limit 429** — the mock serves one 429 (`Retry-After: 2`) on the
     next API call; `POST /api/accounts/{id}/import-one` for a new activity
-    must still land (the worker NAKs with delay and completes on redelivery),
-    but not before the `Retry-After` has passed since the 429 was armed; the
-    mock counted exactly one 429.
+    must still land (the worker NAKs with delay and completes on redelivery);
+    the mock counted exactly one 429, and no provider call started within
+    the `Retry-After` after the failed one came back (the API tap below).
 15. **reconcile** — a recent activity is added to the mock and the account's
     poll interval set to 1s: the next tick publishes a scheduled reconcile,
     the worker enqueues `fetch_source` with reason `reconcile` for it, and it
@@ -185,8 +187,9 @@ repository needs a standalone mock, `cmd/mock-<name>`, that:
 | `POST /_mock/metrics` | `{"key","ts","value"}` | seeds a metric sample (metric providers); `key` is a core data type (`Steps`, `HRV`, `RestingHR`, `Sleep`, `Weight`) and `value` is in core's unit for it, so the step finds it unchanged in `GET /api/health?type=<key>` |
 | `POST /_mock/reset` | | clears injected failures |
 
-The harness binds every mock on `127.0.0.1` and hands the worker
-`${MOCK_URL}` with that address on purpose: core validates `provider_meta`
+The harness binds every mock (and the API tap the worker reaches it
+through) on `127.0.0.1` and hands the worker `${MOCK_URL}` with that address
+on purpose: core validates `provider_meta`
 URLs and accepts plain `http` only on a loopback host (`localhost`, `127.0.0.1`),
 `https` everywhere else. A mock that renders its authorize URL with another
 host name, or a worker that rewrites the override, fails the connect step with

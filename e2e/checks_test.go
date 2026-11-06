@@ -3,6 +3,9 @@
 package e2e
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,14 +67,66 @@ func TestParsedViewDiff(t *testing.T) {
 	}
 }
 
-func TestRetriedEarly(t *testing.T) {
-	if err := retriedEarly(300*time.Millisecond, 2*time.Second); err == nil || !strings.Contains(err.Error(), "retried without waiting") {
-		t.Errorf("an import inside Retry-After = %v", err)
+func TestEarlyRetry(t *testing.T) {
+	t0 := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
+	at := func(ms int) time.Time { return t0.Add(time.Duration(ms) * time.Millisecond) }
+	failed := tapCall{Method: "GET", Path: "/v1/x", Status: 429, Start: at(0), End: at(20)}
+	cases := []struct {
+		name  string
+		calls []tapCall
+		early bool
+	}{
+		{"retry after Retry-After", []tapCall{failed, {Path: "/v1/x", Start: at(2100), End: at(2150)}}, false},
+		{"retry inside Retry-After", []tapCall{failed, {Path: "/v1/x", Start: at(60), End: at(80)}}, true},
+		// A call already in flight when the 429 came back is concurrent, not a retry.
+		{"concurrent call", []tapCall{{Path: "/v1/y", Start: at(5), End: at(30)}, failed, {Path: "/v1/x", Start: at(2500), End: at(2600)}}, false},
+		{"recorded out of order", []tapCall{{Path: "/v1/x", Start: at(40), End: at(50)}, failed}, true},
 	}
-	for _, took := range []time.Duration{2 * time.Second, 11 * time.Second} {
-		if err := retriedEarly(took, 2*time.Second); err != nil {
-			t.Errorf("import after %v = %v", took, err)
+	for _, c := range cases {
+		err := earlyRetry(c.calls, 2*time.Second)
+		if (err != nil) != c.early {
+			t.Errorf("%s: %v; want early %v", c.name, err, c.early)
 		}
+	}
+	if err := earlyRetry(nil, time.Second); err == nil {
+		t.Error("no call after arming must fail")
+	}
+}
+
+// The tap forwards to the mock and records every call.
+func TestAPITap(t *testing.T) {
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/limited" {
+			w.Header().Set("Retry-After", "2")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = io.WriteString(w, "ok "+r.URL.Path)
+	}))
+	defer mock.Close()
+	tap, err := startTap(mock.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tap.stop()
+	m := tap.mark()
+	for _, p := range []string{"/limited", "/a"} {
+		resp, err := http.Get(tap.url + p) //nolint:noctx // test against a local server
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if p == "/a" && string(body) != "ok /a" {
+			t.Errorf("proxied body = %q", body)
+		}
+	}
+	calls := tap.since(m)
+	if len(calls) != 2 || calls[0].Status != 429 || calls[0].Path != "/limited" || calls[1].Status != 200 {
+		t.Fatalf("calls = %+v", calls)
+	}
+	if err := earlyRetry(calls, 2*time.Second); err == nil {
+		t.Error("an immediate second call after the 429 must count as early")
 	}
 }
 

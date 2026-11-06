@@ -88,17 +88,6 @@ func show(v any) string {
 	return fmt.Sprint(v)
 }
 
-// retriedEarly reports a worker that fetched again before the provider's
-// Retry-After had passed. took runs from arming the 429 to seeing the
-// activity in core, so an honouring worker can never be faster.
-func retriedEarly(took, retryAfter time.Duration) error {
-	if took < retryAfter {
-		return fmt.Errorf("activity imported %s after the 429 was armed, inside its Retry-After of %s: the worker retried without waiting",
-			took.Round(time.Millisecond), retryAfter)
-	}
-	return nil
-}
-
 // seededValue finds the sample the harness seeded for a data type in core's
 // daily series: a row from the provider whose value is the seeded one. A
 // worker that files a sample under another data type (or converts its unit)

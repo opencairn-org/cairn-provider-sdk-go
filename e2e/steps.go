@@ -82,7 +82,7 @@ func (r *runner) stepMock() (string, error) {
 	if err := r.prov.startMock(r.ctx); err != nil {
 		return "", err
 	}
-	return "mock at " + r.prov.mockURL, nil
+	return "mock at " + r.prov.mockDirect + ", worker calls through " + r.prov.mockURL, nil
 }
 
 // stepWorker starts the worker and checks presence, release compatibility
@@ -505,7 +505,7 @@ func (r *runner) stepRateLimit() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	armed := time.Now()
+	armed, calls := time.Now(), r.prov.tap.mark()
 	if err := r.prov.ctl.failNext(r.ctx, 429, 1, int(rateLimitRetryAfter/time.Second)); err != nil {
 		return "", err
 	}
@@ -516,7 +516,7 @@ func (r *runner) stepRateLimit() (string, error) {
 		return "", err
 	}
 	took := time.Since(armed)
-	if err := retriedEarly(took, rateLimitRetryAfter); err != nil {
+	if err := earlyRetry(r.prov.tap.since(calls), rateLimitRetryAfter); err != nil {
 		return "", err
 	}
 	after, err := r.prov.ctl.stats(r.ctx)

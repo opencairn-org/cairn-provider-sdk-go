@@ -25,12 +25,15 @@ type providerRun struct {
 	stack *Stack
 	// repo is the worker repository on disk.
 	repo string
-	// mockURL is the mock's base URL (http://127.0.0.1:<port>).
-	mockURL string
-	mock    *proc
-	worker  *proc
-	vars    map[string]string
-	ctl     *mockControl
+	// mockURL is what the worker calls (${MOCK_URL}): the tap in front of
+	// the mock; mockDirect is the mock itself (control API, health).
+	mockURL    string
+	mockDirect string
+	tap        *apiTap
+	mock       *proc
+	worker     *proc
+	vars       map[string]string
+	ctl        *mockControl
 }
 
 func newProviderRun(spec *Spec, stack *Stack) *providerRun {
@@ -69,7 +72,11 @@ func (r *providerRun) startMock(ctx context.Context) error {
 		return err
 	}
 	addr := "127.0.0.1:" + strconv.Itoa(port)
-	r.mockURL = "http://" + addr
+	r.mockDirect = "http://" + addr
+	if r.tap, err = startTap(r.mockDirect); err != nil {
+		return err
+	}
+	r.mockURL = r.tap.url
 	r.vars = map[string]string{
 		"MOCK_URL": r.mockURL, "MOCK_ADDR": addr, "NATS_URL": r.stack.NATSURL, "CORE_URL": r.stack.CoreURL,
 		"WORKER_NAME": r.spec.Worker.Name, "WORKER_KEY": r.spec.WorkerKey(), "RELEASE": workerRelease, "OUT_DIR": r.outDir(),
@@ -80,12 +87,12 @@ func (r *providerRun) startMock(ctx context.Context) error {
 		return err
 	}
 	r.mock = p
-	r.ctl = &mockControl{base: r.mockURL + r.spec.Mock.ControlPath}
+	r.ctl = &mockControl{base: r.mockDirect + r.spec.Mock.ControlPath}
 	return waitUntil(ctx, 30*time.Second, "mock "+r.spec.Mock.HealthPath, func() (bool, error) {
 		if exited, err := p.Exited(); exited {
 			return false, p.exitError(err, 20)
 		}
-		return httpOK(ctx, r.mockURL+r.spec.Mock.HealthPath), nil
+		return httpOK(ctx, r.mockDirect+r.spec.Mock.HealthPath), nil
 	})
 }
 
@@ -145,6 +152,7 @@ func (r *providerRun) stop() {
 	if r.mock != nil {
 		r.mock.Stop()
 	}
+	r.tap.stop()
 }
 
 // mockControl is the harness side of the mock control contract (README).
