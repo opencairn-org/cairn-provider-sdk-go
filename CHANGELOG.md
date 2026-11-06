@@ -44,6 +44,13 @@ release matching the cairn-core contract it implements
 - `examples/minimal`: a complete worker for a fake provider.
 
 ### Fixed
+- `workersdk.Run`: presence and manifest are published once every job
+  consumer and webhook subscriber exists, so a heartbeat means the worker
+  takes work. A cancel during startup is a clean stop (nil, as after it),
+  and a startup error stops the consumers already started instead of
+  leaving their loops running after `Run` returned. Workers' tests that
+  stop `run` on the first heartbeat failed ~1 in 7 under load
+  (`subscribe …: context canceled`).
 - `fitmap`: activities carry the timezone of the FIT file's local timestamp;
   core rejects an activity without one.
 - `sdktest`: results are checked against core's activity rules (known type,

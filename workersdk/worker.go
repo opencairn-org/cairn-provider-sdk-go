@@ -294,12 +294,15 @@ type Job struct {
 // Run starts the worker. Blocks until ctx is cancelled or an unrecoverable
 // error occurs. Steps:
 //
-//  1. Publish initial heartbeat + manifest.
-//  2. For each registered handler, create a pull-consumer subscription.
-//  3. Launch the pull-loop goroutine per subscription.
-//  4. Launch the heartbeat goroutine.
-//  5. Wait for ctx.Done.
-//  6. Drain in-flight handlers, publish final shutdown heartbeat, return.
+//  1. For each registered handler, create a pull-consumer subscription and
+//     launch its pull-loop goroutine; then the webhook subscribers.
+//  2. Publish initial heartbeat + manifest: presence means ready for work.
+//  3. Launch the heartbeat goroutine.
+//  4. Wait for ctx.Done.
+//  5. Drain in-flight handlers, publish final shutdown heartbeat, return.
+//
+// A cancellation during startup is a clean stop (nil); any other startup
+// error stops the loops already started before it is returned.
 func (w *Worker) Run(ctx context.Context) error {
 	if len(w.handlers) == 0 && w.webhooks.event == nil && w.webhooks.verify == nil {
 		return errors.New("workersdk: no handlers registered; call Handle/WebhookEvent/WebhookVerify before Run")
@@ -308,24 +311,19 @@ func (w *Worker) Run(ctx context.Context) error {
 		return err
 	}
 
+	webhookSubs, err := w.subscribe(ctx)
+	if err != nil {
+		w.closeAll(webhookSubs)
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
+	}
 	if err := w.publishHeartbeat(ctx); err != nil {
 		w.logger.Warn("initial heartbeat failed", "error", err)
 	}
 	if err := w.publishManifest(ctx); err != nil {
 		w.logger.Warn("initial manifest publish failed", "error", err)
-	}
-
-	for subject, fn := range w.handlers {
-		if err := w.startPull(ctx, subject, fn); err != nil {
-			return err
-		}
-	}
-	// Webhook subscribers (optional — only started if WebhookEvent or
-	// WebhookVerify was called). Their lifecycle is the explicit Close
-	// call below after ctx.Done.
-	webhookSubs, err := w.startWebhookSubscribers(ctx)
-	if err != nil {
-		return err
 	}
 
 	w.wg.Add(1)
@@ -336,11 +334,27 @@ func (w *Worker) Run(ctx context.Context) error {
 	case <-ctx.Done():
 	case fatal = <-w.fatal:
 	}
+	w.closeAll(webhookSubs)
+	return fatal
+}
+
+// subscribe starts the job consumers and the optional webhook subscribers
+// (only when WebhookEvent or WebhookVerify was called).
+func (w *Worker) subscribe(ctx context.Context) ([]port.Subscription, error) {
+	for subject, fn := range w.handlers {
+		if err := w.startPull(ctx, subject, fn); err != nil {
+			return nil, err
+		}
+	}
+	return w.startWebhookSubscribers(ctx)
+}
+
+// closeAll closes the webhook subscriptions and drains the pull loops.
+func (w *Worker) closeAll(webhookSubs []port.Subscription) {
 	for _, s := range webhookSubs {
 		_ = s.Close(context.Background())
 	}
 	w.shutdown()
-	return fatal
 }
 
 // startPull subscribes the durable consumer for subject and runs its loop.

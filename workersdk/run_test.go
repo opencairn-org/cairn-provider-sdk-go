@@ -91,6 +91,8 @@ type pullBus struct {
 	subs    map[string]*fakeSub
 	pullErr error
 	cfgs    []port.ConsumerConfig
+	// pullHook, when set, runs before each Pull; its error fails that Pull.
+	pullHook func(context.Context, port.ConsumerConfig) error
 }
 
 func newPullBus() *pullBus { return &pullBus{Bus: inmem.New(), subs: map[string]*fakeSub{}} }
@@ -106,11 +108,14 @@ func (b *pullBus) sub(subject string) *fakeSub {
 	return s
 }
 
-func (b *pullBus) Pull(_ context.Context, cfg port.ConsumerConfig) (port.PullSubscription, error) {
+func (b *pullBus) Pull(ctx context.Context, cfg port.ConsumerConfig) (port.PullSubscription, error) {
 	b.mu.Lock()
 	b.cfgs = append(b.cfgs, cfg)
-	err := b.pullErr
+	err, hook := b.pullErr, b.pullHook
 	b.mu.Unlock()
+	if err == nil && hook != nil {
+		err = hook(ctx, cfg)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -250,6 +255,102 @@ func TestRun_PullErrors(t *testing.T) {
 	w.WebhookEvent(func(context.Context, *Worker, WebhookEvent) error { return nil })
 	if err := w.Run(context.Background()); err == nil || !strings.Contains(err.Error(), "webhook events") {
 		t.Fatalf("Run = %v", err)
+	}
+}
+
+// presenceKey reports whether the worker's heartbeat is in the presence bucket.
+func presenceKey(bus *pullBus, w *Worker) bool {
+	kv, _ := bus.KV(kvWorkerPresence)
+	_, err := kv.Get(context.Background(), w.cfg.Name+"."+w.cfg.InstanceID)
+	return err == nil
+}
+
+// Presence is published only once every consumer exists, so a caller that
+// sees the heartbeat can rely on the worker taking jobs.
+func TestRun_PresenceAfterConsumers(t *testing.T) {
+	bus := newPullBus()
+	w := mustNew(t, Config{Name: "n", Provider: "p", Bus: bus})
+	var early []string
+	var mu sync.Mutex
+	bus.pullHook = func(_ context.Context, cfg port.ConsumerConfig) error {
+		if presenceKey(bus, w) {
+			mu.Lock()
+			early = append(early, cfg.Subject)
+			mu.Unlock()
+		}
+		return nil
+	}
+	for _, subj := range []string{"cairn.jobs.a.p", "cairn.jobs.b.p", "cairn.jobs.c.p"} {
+		w.Handle(subj, func(context.Context, *Worker, Job) error { return nil })
+	}
+	w.WebhookEvent(func(context.Context, *Worker, WebhookEvent) error { return nil })
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.Run(ctx) }()
+	waitFor(t, "presence", func() bool { return presenceKey(bus, w) })
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(early) > 0 {
+		t.Errorf("presence published before the consumers %v", early)
+	}
+}
+
+// A cancel while consumers are still being created is a clean stop: no
+// error, no presence, and the loops already started are closed.
+func TestRun_CancelDuringStartup(t *testing.T) {
+	bus := newPullBus()
+	w := mustNew(t, Config{Name: "n", Provider: "p", Bus: bus})
+	w.Handle("cairn.jobs.a.p", func(context.Context, *Worker, Job) error { return nil })
+	ctx, cancel := context.WithCancel(context.Background())
+	entered := make(chan struct{})
+	bus.pullHook = func(ctx context.Context, cfg port.ConsumerConfig) error {
+		if cfg.Stream != "CAIRN_WEBHOOKS" {
+			return nil
+		}
+		close(entered)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	w.WebhookEvent(func(context.Context, *Worker, WebhookEvent) error { return nil })
+	done := make(chan error, 1)
+	go func() { done <- w.Run(ctx) }()
+	<-entered
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Run = %v, want nil after a cancel during startup", err)
+	}
+	if !bus.sub("cairn.jobs.a.p").closed {
+		t.Error("consumer started before the cancel was not closed")
+	}
+	if presenceKey(bus, w) {
+		t.Error("presence published by a worker that never finished starting")
+	}
+}
+
+// A startup error stops the loops started before it and publishes no presence.
+func TestRun_StartupErrorStopsStartedLoops(t *testing.T) {
+	bus := newPullBus()
+	w := mustNew(t, Config{Name: "n", Provider: "p", Bus: bus})
+	w.Handle("cairn.jobs.a.p", func(context.Context, *Worker, Job) error { return nil })
+	w.WebhookEvent(func(context.Context, *Worker, WebhookEvent) error { return nil })
+	bus.pullHook = func(_ context.Context, cfg port.ConsumerConfig) error {
+		if cfg.Stream == "CAIRN_WEBHOOKS" {
+			return errors.New("no stream")
+		}
+		return nil
+	}
+	if err := w.Run(context.Background()); err == nil || !strings.Contains(err.Error(), "webhook events") {
+		t.Fatalf("Run = %v", err)
+	}
+	if !bus.sub("cairn.jobs.a.p").closed {
+		t.Error("consumer started before the failure was not closed")
+	}
+	if presenceKey(bus, w) {
+		t.Error("presence published by a worker that failed to start")
 	}
 }
 
