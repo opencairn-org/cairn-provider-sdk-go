@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -38,6 +39,11 @@ type Spec struct {
 	Conformance ConformanceSpec `yaml:"conformance"`
 	// Wait bounds every "wait until core shows X" poll (default 2m).
 	Wait time.Duration `yaml:"wait"`
+	// Skip names the reason a disabled step does not apply, by step name.
+	Skip map[string]string `yaml:"skip"`
+	// XFail marks steps that fail because of a documented defect outside the
+	// worker, by step name; such a failure is XFAIL, a pass XPASS.
+	XFail map[string]string `yaml:"xfail"`
 	// Path is where the spec was read from (set by LoadSpecFile).
 	Path string `yaml:"-"`
 }
@@ -50,7 +56,8 @@ type WorkerSpec struct {
 	Name string `yaml:"name"`
 	// ReleaseVar is the ldflags variable stamped with the release (e.g. main.workerRelease).
 	ReleaseVar string `yaml:"release_var"`
-	// Env is extra environment; ${MOCK_URL}, ${NATS_URL}, ${CORE_URL}, ${WORKER_NAME}, ${RELEASE} expand.
+	// Env is extra environment; ${MOCK_URL}, ${MOCK_ADDR}, ${NATS_URL}, ${CORE_URL}, ${WORKER_NAME},
+	// ${WORKER_KEY}, ${RELEASE} and ${OUT_DIR} expand.
 	Env map[string]string `yaml:"env"`
 }
 
@@ -231,6 +238,13 @@ func (s *Spec) validate() error {
 		return fmt.Errorf("auth.method must be oauth2 or credentials")
 	case s.Steps.Reparse && !s.Expect.Archive:
 		return fmt.Errorf("steps.reparse needs expect.archive (no parse_blob without a raw archive)")
+	}
+	for field, m := range map[string]map[string]string{"skip": s.Skip, "xfail": s.XFail} {
+		for name := range m {
+			if !slices.Contains(stepNames, name) {
+				return fmt.Errorf("%s: unknown step %q (steps: %v)", field, name, stepNames)
+			}
+		}
 	}
 	return nil
 }

@@ -59,8 +59,11 @@ webhook:
   verify_expect: ${CHALLENGE}    # substring the handshake body must contain
 
 metrics:
-  keys: []                       # e.g. [weight_kg, resting_hr]
+  keys: []                       # core data types, e.g. [Weight, RestingHR]; checked in GET /api/health
   days: 7
+
+skip: {}                         # why a disabled step does not apply, e.g. {"gear on connect": "no gear"}
+xfail: {}                        # a step failing on a documented core defect, e.g. {"webhook verify": "core#123"}
 
 conformance:
   flags: []                      # --gear, --metrics, --parse-blob=false as the manifest implies

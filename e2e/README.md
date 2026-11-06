@@ -140,7 +140,10 @@ databases of earlier runs), `E2E_TIMEOUT` bounds the whole run (default 25m),
     harness detects that checkout and reports the step as **XFAIL**.
 
 Critical steps (1–7) abort the run; every later step is independent and is
-reported PASS / FAIL / SKIP / XFAIL / XPASS with its duration. On any FAIL the
+reported PASS / FAIL / SKIP / XFAIL / XPASS with its duration. A spec names why a step does not apply
+under `skip:` and marks a step that fails on a documented core defect under
+`xfail:` (both keyed by step name, as the report prints it); a failed run keeps
+the full core, worker and mock logs next to its report. On any FAIL the
 report ends with the last 50 lines of the worker, mock and core logs.
 
 ## Adding a provider

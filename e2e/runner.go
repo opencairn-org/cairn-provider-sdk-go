@@ -76,9 +76,16 @@ func (r *runner) critical(name string, fn func() (string, error)) {
 
 // stepWith runs fn; a non-empty known issue turns a failure into XFAIL.
 func (r *runner) stepWith(name string, enabled bool, known string, fn func() (string, error)) bool {
+	if known == "" {
+		known = r.spec.XFail[name]
+	}
 	switch {
 	case !enabled:
-		r.record(name, statusSkip, 0, "disabled in spec")
+		reason := r.spec.Skip[name]
+		if reason == "" {
+			reason = "disabled in spec"
+		}
+		r.record(name, statusSkip, 0, reason)
 		return false
 	case r.aborted != "":
 		r.record(name, statusSkip, 0, "skipped after "+r.aborted+" failed")
@@ -130,8 +137,27 @@ func (r *runner) writeReport() (string, error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, fmt.Sprintf("%s-%s.md", r.spec.Provider, r.started.UTC().Format("20060102-150405")))
-	return path, os.WriteFile(path, []byte(r.report()), 0o600)
+	base := filepath.Join(dir, fmt.Sprintf("%s-%s", r.spec.Provider, r.started.UTC().Format("20060102-150405")))
+	if r.failed() {
+		r.keepLogs(base)
+	}
+	return base + ".md", os.WriteFile(base+".md", []byte(r.report()), 0o600)
+}
+
+// keepLogs copies a failed run's full process logs next to its report; the
+// next queued run overwrites the ones in out/.
+func (r *runner) keepLogs(base string) {
+	for name, src := range map[string]string{
+		"core":   filepath.Join(r.stack.OutDir, "core.log"),
+		"worker": filepath.Join(r.prov.outDir(), "worker.log"),
+		"mock":   filepath.Join(r.prov.outDir(), "mock.log"),
+	} {
+		raw, err := os.ReadFile(src) //nolint:gosec // G304: the harness's own out dir
+		if err != nil {
+			continue
+		}
+		_ = os.WriteFile(base+"."+name+".log", raw, 0o600) //nolint:gosec // G703: base is the harness's reports dir, name a fixed key
+	}
 }
 
 func (r *runner) report() string {

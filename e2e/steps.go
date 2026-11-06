@@ -5,6 +5,7 @@ package e2e
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +17,15 @@ import (
 const pollNever = 86400
 
 // runAll executes the provider's steps in order and writes the report.
+
+// stepNames are the steps in run order; spec skip/xfail keys name them.
+var stepNames = []string{
+	"build worker+mock", "core release", "admin login", "mock up", "worker presence", "connect account",
+	"reconcile on connect", "gear on connect", "discover", "full sync", "activity data", "reparse",
+	"rate limit 429", "reconcile", "webhook event", "webhook verify", "import metrics", "token refresh",
+	"worker-conformance",
+}
+
 func (r *runner) runAll() {
 	defer r.prov.stop()
 	r.critical("build worker+mock", r.stepBuild)
@@ -369,8 +379,11 @@ func (r *runner) mergedChannels(activityID string) string {
 // stepReparse re-runs the worker's parser over the archived blob.
 func (r *runner) stepReparse() (string, error) {
 	acts, err := r.core.listActivities(r.ctx, r.spec.Provider)
-	if err != nil || len(acts) == 0 {
-		return "", fmt.Errorf("no activity to re-parse: %w", err)
+	switch {
+	case err != nil:
+		return "", fmt.Errorf("list activities to re-parse: %w", err)
+	case len(acts) == 0 || len(acts[0].Sources) == 0:
+		return "", errors.New("no activity to re-parse")
 	}
 	act, src := acts[0], acts[0].Sources[0]
 	mark := r.stack.bus.Mark()
