@@ -57,6 +57,18 @@ release matching the cairn-core contract it implements
   time order, durations, IANA timezone) and fail the test where core would
   reject the import. The example worker set no timezone and every import of
   it would have been rejected; it now does.
+- `e2e`: steps that passed a faulty worker (negative controls in
+  `e2e/README.md`) now fail it: activity data checks for a loadable IANA
+  timezone (core only refuses an empty one); reparse compares the activity,
+  laps and source stream before and after, once core's
+  `activity.changed` marks the re-merge; rate limit 429 watches the worker's
+  provider calls through an API tap (a reverse proxy behind `${MOCK_URL}`)
+  and fails a call inside the `Retry-After`; the new `webhook forged` step
+  (`steps.webhook_forged`, mock emit `"forge": true`) fails a worker that
+  accepts an event signed with the wrong secret; import metrics seeds a
+  distinct value per data type and finds each, from the provider, in its
+  own series. A failed import reports core's `last_error` and ends the wait
+  at once.
 - `e2e`: the import-metrics step reads core's health series (`GET
   /api/health`), where worker METRIC events land, instead of `/api/metrics`.
 - `natsbus.RateLimiter`: a deleted or purged rate-limit key (an operator's
