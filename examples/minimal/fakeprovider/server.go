@@ -252,6 +252,8 @@ func RideFIT(start time.Time) []byte {
 		SetSport(typedef.SportCycling).SetSubSport(typedef.SubSportRoad).SetTotalElapsedTime(n * 1000).SetTotalTimerTime(n * 1000).
 		SetTotalDistance(n * 10 * 100).SetAvgHeartRate(140).SetAvgPower(200).SetTotalAscent(12)}
 	a.Laps = []*mesgdef.Lap{mesgdef.NewLap(nil).SetStartTime(start).SetTimestamp(start.Add(n * time.Second)).SetTotalElapsedTime(n * 1000).SetTotalDistance(n * 10 * 100)}
+	// A head unit records its wall clock next to UTC; fitmap names the zone from it.
+	a.Activity = mesgdef.NewActivity(nil).SetTimestamp(start.Add(n * time.Second)).SetLocalTimestamp(start.Add(n*time.Second + 2*time.Hour))
 	for i := 0; i < n; i++ {
 		a.Records = append(a.Records, mesgdef.NewRecord(nil).SetTimestamp(start.Add(time.Duration(i)*time.Second)).
 			SetPositionLatDegrees(48.1+float64(i)*0.0001).SetPositionLongDegrees(11.5+float64(i)*0.0001).

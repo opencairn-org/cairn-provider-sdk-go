@@ -90,6 +90,9 @@ func mapFIT(raw []byte, ref *workerv1.ExternalRef, title string) (*workerv1.Impo
 	}
 	act := res.Activity
 	act.Ref = ref
+	if act.Payload.Timezone == "" {
+		act.Payload.Timezone = "UTC" // core rejects an activity without a zone; tz.FromOffset names a bare offset
+	}
 	if title != "" {
 		act.Payload.Title = title
 	}

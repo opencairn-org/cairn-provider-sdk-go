@@ -10,6 +10,7 @@ import (
 
 	"github.com/opencairn-org/cairn-provider-sdk-go/natsbus"
 	"github.com/opencairn-org/cairn-provider-sdk-go/port"
+	cairnv1 "github.com/opencairn-org/cairn-provider-sdk-go/proto/cairn/v1"
 	workerv1 "github.com/opencairn-org/cairn-provider-sdk-go/proto/cairn/worker/v1"
 	"github.com/opencairn-org/cairn-provider-sdk-go/workersdk"
 )
@@ -58,7 +59,9 @@ func TestCoreDrivesAWorkerEndToEnd(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		act := &workerv1.ImportedActivity{Ref: in.Ref(), RawBlobId: id, RawSizeBytes: size}
+		act := &workerv1.ImportedActivity{Ref: in.Ref(), RawBlobId: id, RawSizeBytes: size, Payload: &cairnv1.ActivitySourcePayload{
+			Type: cairnv1.ActivityType_ACTIVITY_TYPE_RUN, Timezone: "Europe/Berlin",
+		}}
 		_ = w.PublishEvent(ctx, "example.fetched", "ev:"+in.ExtID, []byte(in.ExtID))
 		return w.PublishResultViaBlob(ctx, job, "result:"+in.JobID, w.NewJobResult(&workerv1.WorkerEvent{
 			Type: workerv1.WorkerEventType_WORKER_EVENT_TYPE_ACTIVITY, Entity: &workerv1.WorkerEvent_Activity{Activity: act},

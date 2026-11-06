@@ -75,6 +75,7 @@
         "normalizedPowerW": 230,
         "tss": 45.6
       },
+      "timezone": "Etc/GMT-2",
       "title": "Gravel",
       "type": "ACTIVITY_TYPE_RIDE"
     },

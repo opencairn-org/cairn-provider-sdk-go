@@ -19,6 +19,7 @@ import (
 
 	cairnv1 "github.com/opencairn-org/cairn-provider-sdk-go/proto/cairn/v1"
 	workerv1 "github.com/opencairn-org/cairn-provider-sdk-go/proto/cairn/worker/v1"
+	"github.com/opencairn-org/cairn-provider-sdk-go/tz"
 )
 
 // ErrNotActivity is returned for FIT files of another type (a course, a
@@ -134,6 +135,7 @@ func sessionPayload(s *mesgdef.Session, act *filedef.Activity, start time.Time) 
 	}
 	if act.Activity != nil && !act.Activity.LocalTimestamp.IsZero() && !act.Activity.Timestamp.IsZero() {
 		p.Extra["utc_offset"] = strconv.Itoa(datetime.TzOffsetHours(act.Activity.LocalTimestamp, act.Activity.Timestamp))
+		p.Timezone = tz.FromLocal(act.Activity.LocalTimestamp, act.Activity.Timestamp)
 	}
 	if len(p.Extra) == 0 {
 		p.Extra = nil
