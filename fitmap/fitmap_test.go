@@ -417,6 +417,8 @@ func TestElevationGainLoss(t *testing.T) {
 		{[]float64{100, 105, 110, 105, 100}, 10, 10},
 		{[]float64{100, 103, 106, 101, 95}, 6, 11},
 		{[]float64{100}, 0, 0},
+		{[]float64{100, 105}, 5, 0}, // exactly the threshold counts
+		{[]float64{100, 95}, 0, 5},
 	} {
 		if gain, loss := elevationGainLoss(c.alt); gain != c.gain || loss != c.loss {
 			t.Errorf("elevationGainLoss(%v) = %v, %v; want %v, %v", c.alt, gain, loss, c.gain, c.loss)
