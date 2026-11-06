@@ -392,7 +392,7 @@ func (r *runner) stepReparse() (string, error) {
 		return "", errors.New("no activity to re-parse")
 	}
 	act, src := acts[0], acts[0].Sources[0]
-	before, err := r.parsedView(act.ID, src.ID)
+	before, err := r.storedView(act.ID, src.ID)
 	if err != nil {
 		return "", fmt.Errorf("before re-parse: %w", err)
 	}
@@ -438,6 +438,17 @@ type parsedView struct {
 	laps     int
 	channels []string
 	samples  int
+}
+
+// storedView is parsedView once core stored the source's stream, which
+// lands a moment after the activity.
+func (r *runner) storedView(activityID, sourceID string) (parsedView, error) {
+	if r.spec.Expect.Streams {
+		if err := r.waitSourceStream(sourceID); err != nil {
+			return parsedView{}, err
+		}
+	}
+	return r.parsedView(activityID, sourceID)
 }
 
 func (r *runner) parsedView(activityID, sourceID string) (parsedView, error) {
