@@ -236,6 +236,23 @@ func (c *coreClient) syncPreview(ctx context.Context, accountID string) (preview
 	return out, err
 }
 
+// queueItem is one row of GET /api/accounts/{id}/queue/items.
+type queueItem struct {
+	ExternalID string `json:"external_id"`
+	Status     string `json:"status"`
+	Attempts   int    `json:"attempts"`
+	LastError  string `json:"last_error"`
+}
+
+// failedQueueItems lists the account's import queue items that failed, with core's reason.
+func (c *coreClient) failedQueueItems(ctx context.Context, accountID string) ([]queueItem, error) {
+	var out struct {
+		Items []queueItem `json:"items"`
+	}
+	err := c.get(ctx, "/api/accounts/"+accountID+"/queue/items?status=failed", &out)
+	return out.Items, err
+}
+
 func (c *coreClient) syncStart(ctx context.Context, accountID string, skipExisting bool) error {
 	return c.post(ctx, "/api/accounts/"+accountID+"/sync/start", map[string]bool{"skip_existing": skipExisting}, nil)
 }
@@ -260,6 +277,7 @@ type activity struct {
 	Type      string           `json:"type"`
 	Title     string           `json:"title"`
 	StartTime string           `json:"startTime"`
+	Timezone  string           `json:"timezone"`
 	Summary   map[string]any   `json:"summary"`
 	Sources   []activitySource `json:"sources"`
 	GearID    string           `json:"gearId"`
@@ -289,6 +307,24 @@ func (c *coreClient) listActivities(ctx context.Context, provider string) ([]act
 	req := map[string]any{"providers": []string{provider}, "includeSources": true, "page": map[string]any{"pageSize": 200}}
 	err := c.connect(ctx, "ActivityService", "ListActivities", req, &out)
 	return out.Activities, err
+}
+
+// activityFields returns one listed activity as generic JSON (protojson
+// names), for comparing what a re-parse reproduced.
+func (c *coreClient) activityFields(ctx context.Context, provider, activityID string) (map[string]any, error) {
+	var out struct {
+		Activities []map[string]any `json:"activities"`
+	}
+	req := map[string]any{"providers": []string{provider}, "page": map[string]any{"pageSize": 200}}
+	if err := c.connect(ctx, "ActivityService", "ListActivities", req, &out); err != nil {
+		return nil, err
+	}
+	for _, a := range out.Activities {
+		if a["id"] == activityID {
+			return a, nil
+		}
+	}
+	return nil, fmt.Errorf("activity %s not listed", activityID)
 }
 
 func (c *coreClient) listSources(ctx context.Context, activityID string) ([]activitySource, error) {

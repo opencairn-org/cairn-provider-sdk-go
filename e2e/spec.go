@@ -104,10 +104,13 @@ type ExpectSpec struct {
 
 // StepsSpec switches the data steps on; connect always runs.
 type StepsSpec struct {
-	Discover      bool `yaml:"discover"`
-	FullSync      bool `yaml:"full_sync"`
-	Reconcile     bool `yaml:"reconcile"`
-	Webhook       bool `yaml:"webhook"`
+	Discover  bool `yaml:"discover"`
+	FullSync  bool `yaml:"full_sync"`
+	Reconcile bool `yaml:"reconcile"`
+	Webhook   bool `yaml:"webhook"`
+	// WebhookForged delivers an event signed with the wrong secret; the
+	// worker must drop it (needs the mock's emit "forge").
+	WebhookForged bool `yaml:"webhook_forged"`
 	WebhookVerify bool `yaml:"webhook_verify"`
 	Reparse       bool `yaml:"reparse"`
 	ImportMetrics bool `yaml:"import_metrics"`
@@ -238,6 +241,8 @@ func (s *Spec) validate() error {
 		return fmt.Errorf("auth.method must be oauth2 or credentials")
 	case s.Steps.Reparse && !s.Expect.Archive:
 		return fmt.Errorf("steps.reparse needs expect.archive (no parse_blob without a raw archive)")
+	case s.Steps.WebhookForged && !s.Steps.Webhook:
+		return fmt.Errorf("steps.webhook_forged needs steps.webhook")
 	}
 	for field, m := range map[string]map[string]string{"skip": s.Skip, "xfail": s.XFail} {
 		for name := range m {

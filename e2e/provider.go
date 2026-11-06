@@ -207,13 +207,14 @@ func (m *mockControl) addActivity(ctx context.Context, name string, start time.T
 	return out.ID, err
 }
 
-// emitWebhook has the mock deliver a provider-shaped event to core.
-func (m *mockControl) emitWebhook(ctx context.Context, url, aspect, activityID string) (int, string, error) {
+// emitWebhook has the mock deliver a provider-shaped event to core; forged
+// signs it with a secret (or token) the worker does not hold.
+func (m *mockControl) emitWebhook(ctx context.Context, url, aspect, activityID string, forged bool) (int, string, error) {
 	var out struct {
 		Status int    `json:"status"`
 		Body   string `json:"body"`
 	}
-	err := m.call(ctx, http.MethodPost, "/webhooks/emit", map[string]string{"url": url, "aspect": aspect, "activity_id": activityID}, &out)
+	err := m.call(ctx, http.MethodPost, "/webhooks/emit", map[string]any{"url": url, "aspect": aspect, "activity_id": activityID, "forge": forged}, &out)
 	return out.Status, out.Body, err
 }
 

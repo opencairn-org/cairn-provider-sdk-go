@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 )
@@ -22,7 +24,7 @@ const pollNever = 86400
 var stepNames = []string{
 	"build worker+mock", "core release", "admin login", "mock up", "worker presence", "connect account",
 	"reconcile on connect", "gear on connect", "discover", "full sync", "activity data", "reparse",
-	"rate limit 429", "reconcile", "webhook event", "webhook verify", "import metrics", "token refresh",
+	"rate limit 429", "reconcile", "webhook event", "webhook forged", "webhook verify", "import metrics", "token refresh",
 	"worker-conformance",
 }
 
@@ -43,6 +45,7 @@ func (r *runner) runAll() {
 	r.step("rate limit 429", r.spec.Steps.RateLimit, r.stepRateLimit)
 	r.step("reconcile", r.spec.Steps.Reconcile, r.stepReconcile)
 	r.step("webhook event", r.spec.Steps.Webhook, r.stepWebhook)
+	r.step("webhook forged", r.spec.Steps.WebhookForged, r.stepWebhookForged)
 	r.stepWith("webhook verify", r.spec.Steps.WebhookVerify, r.verifyKnownIssue(), r.stepWebhookVerify)
 	r.step("import metrics", r.spec.Steps.ImportMetrics, r.stepImportMetrics)
 	r.step("token refresh", r.spec.Steps.TokenRefresh, r.stepTokenRefresh)
@@ -275,7 +278,7 @@ func (r *runner) stepFullSync() (string, error) {
 			return false, err
 		}
 		if a.Queue["failed"] > 0 {
-			return false, fmt.Errorf("queue has %d failed items: %+v", a.Queue["failed"], a.Queue)
+			return false, fmt.Errorf("queue has %d failed items: %+v%s", a.Queue["failed"], a.Queue, r.failureReasons(""))
 		}
 		return !a.Discovering && a.Imported >= want && a.Queue["pending"]+a.Queue["in_progress"] == 0, nil
 	})
@@ -312,6 +315,9 @@ func (r *runner) stepActivityData() (string, error) {
 func (r *runner) checkActivity(a activity) error {
 	if want := r.spec.Expect.ActivityType; want != "" && a.Type != want {
 		return fmt.Errorf("type %s, want %s", a.Type, want)
+	}
+	if err := checkTimezone(a.Timezone); err != nil {
+		return err
 	}
 	if len(a.Sources) == 0 || a.Sources[0].Provider != r.spec.Provider || a.Sources[0].SourceWorkerName != r.spec.Worker.Name {
 		return fmt.Errorf("sources %+v; want one from %s/%s", a.Sources, r.spec.Provider, r.spec.Worker.Name)
@@ -386,6 +392,10 @@ func (r *runner) stepReparse() (string, error) {
 		return "", errors.New("no activity to re-parse")
 	}
 	act, src := acts[0], acts[0].Sources[0]
+	before, err := r.parsedView(act.ID, src.ID)
+	if err != nil {
+		return "", fmt.Errorf("before re-parse: %w", err)
+	}
 	mark := r.stack.bus.Mark()
 	if err := r.core.reimportSource(r.ctx, act.ID, src.ID, "reparse"); err != nil {
 		return "", err
@@ -403,7 +413,64 @@ func (r *runner) stepReparse() (string, error) {
 	if want := r.spec.Expect.ParserVersion; want != "" && after.SourceWorkerVersion != want {
 		return "", fmt.Errorf("parser version %q after re-parse, want %q", after.SourceWorkerVersion, want)
 	}
-	return fmt.Sprintf("source %s re-parsed at %s, parser %s", after.ID, after.LastReimportedAt, after.SourceWorkerVersion), nil
+	// Core re-merges after it stamps the source; its activity.changed event marks the end.
+	if _, err := r.stack.bus.WaitFor(r.ctx, r.spec.Wait, "activity.changed after re-parse", mark, func(m busMsg) bool {
+		return m.Subject == activityChangedSubject && m.Field("activity_id") == act.ID
+	}); err != nil {
+		return "", err
+	}
+	again, err := r.parsedView(act.ID, src.ID)
+	if err != nil {
+		return "", fmt.Errorf("after re-parse: %w", err)
+	}
+	if diff := before.diff(again); len(diff) > 0 {
+		return "", fmt.Errorf("re-parse of the same blob by parser %s changed the activity: %s", after.SourceWorkerVersion, strings.Join(diff, "; "))
+	}
+	return fmt.Sprintf("source %s re-parsed at %s, parser %s; activity, laps and stream unchanged", after.ID, after.LastReimportedAt, after.SourceWorkerVersion), nil
+}
+
+// activityChangedSubject is core's event after an ingest or re-parse was merged.
+const activityChangedSubject = "cairn.events.activity.changed"
+
+// parsedView is what one parse of a blob produced, as core shows it.
+type parsedView struct {
+	fields   map[string]any
+	laps     int
+	channels []string
+	samples  int
+}
+
+func (r *runner) parsedView(activityID, sourceID string) (parsedView, error) {
+	var v parsedView
+	var err error
+	if v.fields, err = r.core.activityFields(r.ctx, r.spec.Provider, activityID); err != nil {
+		return v, err
+	}
+	if r.spec.Expect.Laps {
+		laps, err := r.core.laps(r.ctx, activityID)
+		if err != nil {
+			return v, fmt.Errorf("laps: %w", err)
+		}
+		v.laps = len(laps)
+	}
+	if r.spec.Expect.Streams {
+		if v.channels, v.samples, err = r.core.sourceStream(r.ctx, sourceID); err != nil {
+			return v, fmt.Errorf("stream: %w", err)
+		}
+		sort.Strings(v.channels)
+	}
+	return v, nil
+}
+
+func (v parsedView) diff(after parsedView) []string {
+	out := fieldDiff(v.fields, after.fields, reparseFields)
+	if v.laps != after.laps {
+		out = append(out, fmt.Sprintf("laps: %d → %d", v.laps, after.laps))
+	}
+	if v.samples != after.samples || !slices.Equal(v.channels, after.channels) {
+		out = append(out, fmt.Sprintf("stream: %d samples %v → %d samples %v", v.samples, v.channels, after.samples, after.channels))
+	}
+	return out
 }
 
 // waitReparsed waits until the source is current again with a new re-parse stamp.
@@ -438,13 +505,18 @@ func (r *runner) stepRateLimit() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := r.prov.ctl.failNext(r.ctx, 429, 1, 2); err != nil {
+	armed := time.Now()
+	if err := r.prov.ctl.failNext(r.ctx, 429, 1, int(rateLimitRetryAfter/time.Second)); err != nil {
 		return "", err
 	}
 	if err := r.core.importOne(r.ctx, r.acct.ID, extID); err != nil {
 		return "", err
 	}
 	if err := r.waitActivity(extID); err != nil {
+		return "", err
+	}
+	took := time.Since(armed)
+	if err := retriedEarly(took, rateLimitRetryAfter); err != nil {
 		return "", err
 	}
 	after, err := r.prov.ctl.stats(r.ctx)
@@ -460,8 +532,11 @@ func (r *runner) stepRateLimit() (string, error) {
 	if err := r.prov.ctl.reset(r.ctx); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("activity %s imported after one 429 (retry-after 2s)", extID), nil
+	return fmt.Sprintf("activity %s imported %s after one 429 (retry-after %s)", extID, took.Round(time.Millisecond), rateLimitRetryAfter), nil
 }
+
+// rateLimitRetryAfter is the Retry-After the mock sends with its 429.
+const rateLimitRetryAfter = 2 * time.Second
 
 // stepReconcile adds a recent activity and lowers the poll interval so the
 // scheduler's next tick reconciles the account.
@@ -498,7 +573,7 @@ func (r *runner) stepWebhook() (string, error) {
 	}
 	mark := r.stack.bus.Mark()
 	url := r.stack.CoreURL + "/webhooks/" + r.spec.WorkerKey()
-	status, body, err := r.prov.ctl.emitWebhook(r.ctx, url, r.spec.Webhook.Aspect, extID)
+	status, body, err := r.prov.ctl.emitWebhook(r.ctx, url, r.spec.Webhook.Aspect, extID, false)
 	if err != nil {
 		return "", err
 	}
@@ -517,6 +592,48 @@ func (r *runner) stepWebhook() (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("event for %s forwarded, fetched and imported", extID), nil
+}
+
+// stepWebhookForged has the mock deliver an event the provider never signed
+// (wrong secret or token) for one activity, then a genuine event for another.
+// Once the genuine one is imported the forged one, delivered first, must have
+// been dropped: no fetch_source for it and no activity in core.
+func (r *runner) stepWebhookForged() (string, error) {
+	forged, err := r.prov.ctl.addActivity(r.ctx, "e2e forged webhook", time.Now().Add(-90*time.Minute))
+	if err != nil {
+		return "", err
+	}
+	genuine, err := r.prov.ctl.addActivity(r.ctx, "e2e webhook after a forged one", time.Now().Add(-80*time.Minute))
+	if err != nil {
+		return "", err
+	}
+	mark := r.stack.bus.Mark()
+	url := r.stack.CoreURL + "/webhooks/" + r.spec.WorkerKey()
+	fstatus, _, err := r.prov.ctl.emitWebhook(r.ctx, url, r.spec.Webhook.Aspect, forged, true)
+	if err != nil {
+		return "", fmt.Errorf("forged event: %w", err)
+	}
+	status, body, err := r.prov.ctl.emitWebhook(r.ctx, url, r.spec.Webhook.Aspect, genuine, false)
+	switch {
+	case err != nil:
+		return "", fmt.Errorf("genuine event after the forged one: %w", err)
+	case status != 200:
+		return "", fmt.Errorf("genuine event after the forged one: core answered %d: %s", status, body)
+	}
+	if err := r.waitActivity(genuine); err != nil {
+		return "", fmt.Errorf("genuine event after the forged one: %w", err)
+	}
+	fetches := r.stack.bus.Count(mark, func(m busMsg) bool {
+		return jobWithReason(r.jobSubject("fetch_source"), "webhook")(m) && m.Field("ext_id") == forged
+	})
+	imported, err := r.activityListed(forged)
+	switch {
+	case err != nil:
+		return "", err
+	case fetches > 0 || imported:
+		return "", fmt.Errorf("forged event for %s accepted: %d fetch_source jobs, in core %v; the worker does not verify the signature", forged, fetches, imported)
+	}
+	return fmt.Sprintf("forged event for %s (core answered %d) dropped; genuine event for %s imported", forged, fstatus, genuine), nil
 }
 
 // verifyKnownIssue names the core bug that breaks the GET handshake while
@@ -547,7 +664,7 @@ func (r *runner) stepWebhookVerify() (string, error) {
 // stepImportMetrics seeds samples on the mock and triggers import_metrics.
 func (r *runner) stepImportMetrics() (string, error) {
 	for i, key := range r.spec.Metrics.Keys {
-		if err := r.prov.ctl.addMetric(r.ctx, key, time.Now().Add(-time.Duration(i+1)*24*time.Hour), 70+float64(i)); err != nil {
+		if err := r.prov.ctl.addMetric(r.ctx, key, time.Now().Add(-time.Duration(i+1)*24*time.Hour), metricValue(i)); err != nil {
 			return "", err
 		}
 	}
@@ -558,24 +675,41 @@ func (r *runner) stepImportMetrics() (string, error) {
 	if _, err := r.stack.bus.WaitFor(r.ctx, r.spec.Wait, "import_metrics job", mark, onSubject(r.jobSubject("import_metrics"))); err != nil {
 		return "", err
 	}
-	got := map[string]int{}
-	err := waitUntil(r.ctx, r.spec.Wait, "health samples stored", func() (bool, error) {
+	got := map[string][]map[string]any{}
+	err := waitUntil(r.ctx, r.spec.Wait, "seeded health samples stored", func() (bool, error) {
 		for _, key := range r.spec.Metrics.Keys {
 			rows, err := r.core.healthSeries(r.ctx, key, r.spec.Metrics.Days+1)
 			if err != nil {
 				return false, err
 			}
-			got[key] = len(rows)
+			got[key] = rows
 		}
-		for _, key := range r.spec.Metrics.Keys {
-			if got[key] == 0 {
-				return false, nil
-			}
-		}
-		return true, nil
+		return len(r.missingSamples(got)) == 0, nil
 	})
-	return fmt.Sprintf("daily samples per data type %v", got), err
+	if err != nil {
+		return "", fmt.Errorf("%w: %s", err, strings.Join(r.missingSamples(got), "; "))
+	}
+	counts := map[string]int{}
+	for key, rows := range got {
+		counts[key] = len(rows)
+	}
+	return fmt.Sprintf("seeded values found per data type, daily samples %v", counts), nil
 }
+
+// missingSamples names each data type whose series lacks the seeded sample.
+func (r *runner) missingSamples(got map[string][]map[string]any) []string {
+	var out []string
+	for i, key := range r.spec.Metrics.Keys {
+		if !seededValue(got[key], r.spec.Provider, metricValue(i)) {
+			out = append(out, fmt.Sprintf("%s %v not in %s", key, metricValue(i), describeRows(got[key])))
+		}
+	}
+	return out
+}
+
+// metricValue is the value seeded for the i-th key: distinct per key, so a
+// sample filed under the wrong data type is told apart.
+func metricValue(i int) float64 { return 70 + 3*float64(i) }
 
 // stepTokenRefresh: the mock's exchange token expires inside the SDK's
 // refresh skew, so the first job refreshed it; exactly once for the whole
@@ -639,22 +773,57 @@ func onlyReconcileRoundTripFailed(out string) bool {
 	return fails > 0
 }
 
-// waitActivity waits until an activity with the external id is listed.
+// waitActivity waits until an activity with the external id is listed; an
+// import queue item for it that failed ends the wait with core's reason.
 func (r *runner) waitActivity(extID string) error {
 	return waitUntil(r.ctx, r.spec.Wait, "activity "+extID+" in core", func() (bool, error) {
-		acts, err := r.core.listActivities(r.ctx, r.spec.Provider)
-		if err != nil {
-			return false, err
+		ok, err := r.activityListed(extID)
+		if ok || err != nil {
+			return ok, err
 		}
-		for _, a := range acts {
-			for _, s := range a.Sources {
-				if s.ExternalID == extID {
-					return true, nil
-				}
-			}
+		if why := r.failureReasons(extID); why != "" {
+			return false, fmt.Errorf("import failed%s", why)
 		}
 		return false, nil
 	})
+}
+
+// failureReasons renders core's last_error of the account's failed queue
+// items (only extID's when set), or "" when none failed.
+func (r *runner) failureReasons(extID string) string {
+	items, err := r.core.failedQueueItems(r.ctx, r.acct.ID)
+	if err != nil {
+		return ""
+	}
+	var out []string
+	for _, it := range items {
+		if extID == "" || it.ExternalID == extID {
+			out = append(out, fmt.Sprintf("%s after %d attempts: %s", it.ExternalID, it.Attempts, it.LastError))
+		}
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	if len(out) > 3 {
+		out = append(out[:3], fmt.Sprintf("%d more", len(out)-3))
+	}
+	return "; core: " + strings.Join(out, "; ")
+}
+
+// activityListed reports whether core lists an activity with the external id.
+func (r *runner) activityListed(extID string) (bool, error) {
+	acts, err := r.core.listActivities(r.ctx, r.spec.Provider)
+	if err != nil {
+		return false, err
+	}
+	for _, a := range acts {
+		for _, s := range a.Sources {
+			if s.ExternalID == extID {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // jobSubject is the pool's subject for a job kind (ADR 0006).

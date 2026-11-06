@@ -99,16 +99,22 @@ databases of earlier runs), `E2E_TIMEOUT` bounds the whole run (default 25m),
     `raw_blob_id` when `expect.archive`), `GET /api/activities/{id}/laps`,
     the per-source stream (`GetActivityStream`: channels and samples, polled
     because core stores it a moment after the activity), gear on the
-    activity; the merged stream's channels are reported once they
-    materialise.
+    activity, and a loadable IANA `timezone` (core only refuses an empty
+    one); the merged stream's channels are reported once they materialise.
+    A failed import queue item fails the step with core's `last_error`.
 13. **reparse** — `POST /api/activities/{id}/sources/{sid}/reimport {mode:
     reparse}` → a `parse_blob` job and result on the bus, the source back to
     `REIMPORT_STATUS_CURRENT` with a new `last_reimported_at` and
-    `source_worker_version == expect.parser_version`.
+    `source_worker_version == expect.parser_version`. Once core's
+    `cairn.events.activity.changed` for the activity shows the re-merge is
+    done, the activity (type, times, durations, timezone, title, summary
+    except core's training load), its laps and its source stream must be
+    exactly what the first parse produced.
 14. **rate limit 429** — the mock serves one 429 (`Retry-After: 2`) on the
     next API call; `POST /api/accounts/{id}/import-one` for a new activity
-    must still land (the worker NAKs with delay and completes on redelivery);
-    the mock counted exactly one 429.
+    must still land (the worker NAKs with delay and completes on redelivery),
+    but not before the `Retry-After` has passed since the 429 was armed; the
+    mock counted exactly one 429.
 15. **reconcile** — a recent activity is added to the mock and the account's
     poll interval set to 1s: the next tick publishes a scheduled reconcile,
     the worker enqueues `fetch_source` with reason `reconcile` for it, and it
@@ -117,22 +123,29 @@ databases of earlier runs), `E2E_TIMEOUT` bounds the whole run (default 25m),
     `POST /webhooks/<worker_key>`; core forwards it on
     `cairn.webhooks.<worker_key>.event`, the worker resolves the owner and
     enqueues `fetch_source` with reason `webhook`; the activity appears.
-17. **webhook verify** — `GET /webhooks/<worker_key>?<verify_query>` must
+17. **webhook forged** (`steps.webhook_forged`, signed providers) — the mock
+    delivers an event signed with a secret (or token) the worker does not
+    hold for one activity, then a genuine event for another; once the genuine
+    one is imported, the forged one must have left no `fetch_source` and no
+    activity.
+18. **webhook verify** — `GET /webhooks/<worker_key>?<verify_query>` must
     answer 200 with `verify_expect` in the body. Core before commit
     `cebd00c` (`fix/webhook-verify-stream`) answers 502: the `CAIRN_WEBHOOKS`
     stream covered `cairn.webhooks.>` and its pub-ack reached the forwarder
     before the worker's reply. The harness checks whether core's checkout
     contains the fix; without it the step is reported as **XFAIL** (expected
     failure, not counted), with it a failure is a failure.
-18. **import metrics** — metric providers: samples seeded on the mock,
-    `POST /api/accounts/{id}/import-health?days=N`, an `import_metrics` job,
-    `GET /api/metrics?keys=…` lists them.
-19. **token refresh** — the mock issues the exchange token with an
+19. **import metrics** — metric providers: samples seeded on the mock,
+    `POST /api/accounts/{id}/import-health?days=N`, an `import_metrics` job;
+    core's daily series (`GET /api/health?type=<key>`) must hold each seeded
+    value, from the provider, under its own data type (the values differ
+    per key, so a sample filed under another type is caught).
+20. **token refresh** — the mock issues the exchange token with an
     `expires_in` inside the SDK's 60s refresh skew, so the first job
     refreshed it through `cairn.tokens.<provider>.store`; the mock must count
     exactly one refresh and no 401 for the whole run (the stale token was
     never sent, the refreshed one was cached and persisted).
-20. **worker-conformance** — `go run ./cmd/worker-conformance --nats …
+21. **worker-conformance** — `go run ./cmd/worker-conformance --nats …
     --provider … --worker-name … <flags> [--active --account-id …]` in
     cairn-core exits 0 (output in the report). A core whose tool still
     awaits the pre-pool subject `cairn.results.reconcile.<provider>.<account>`
@@ -167,9 +180,9 @@ repository needs a standalone mock, `cmd/mock-<name>`, that:
 | `GET /_mock/healthz` | | 200 `{"ok":true}` once ready |
 | `GET /_mock/stats` | | `{"refreshes","exchanges","api_calls","unauthorized","rate_limited_served","webhooks_sent","activities"}` |
 | `POST /_mock/activities` | `{"name","start":RFC3339,"streams":bool}` | adds an activity → `{"id":"<external id>"}` |
-| `POST /_mock/webhooks/emit` | `{"url","aspect","activity_id"}` | POSTs the provider's (signed) event for that activity to `url` → `{"status","body"}` |
+| `POST /_mock/webhooks/emit` | `{"url","aspect","activity_id","forge"}` | POSTs the provider's (signed) event for that activity to `url` → `{"status","body"}`; `forge: true` signs it with a wrong secret or token |
 | `POST /_mock/fail-next` | `{"status","count","retry_after"}` | the next `count` API calls answer `status` (429 with `Retry-After`) |
-| `POST /_mock/metrics` | `{"key","ts","value"}` | seeds a metric sample (metric providers); `key` is a core data type (`Steps`, `HRV`, `RestingHR`, `Sleep`, `Weight`), and the step checks `GET /api/health?type=<key>` |
+| `POST /_mock/metrics` | `{"key","ts","value"}` | seeds a metric sample (metric providers); `key` is a core data type (`Steps`, `HRV`, `RestingHR`, `Sleep`, `Weight`) and `value` is in core's unit for it, so the step finds it unchanged in `GET /api/health?type=<key>` |
 | `POST /_mock/reset` | | clears injected failures |
 
 The harness binds every mock on `127.0.0.1` and hands the worker

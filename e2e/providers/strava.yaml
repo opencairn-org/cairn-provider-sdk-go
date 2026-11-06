@@ -50,6 +50,7 @@ steps:
   full_sync: true
   reconcile: true
   webhook: true
+  webhook_forged: false
   webhook_verify: true
   reparse: true
   import_metrics: false # Strava has no health metrics
@@ -71,3 +72,6 @@ conformance:
   active: true
 
 wait: 2m
+
+skip:
+  webhook forged: "Strava events are unsigned: they only trigger a fetch with the account token"

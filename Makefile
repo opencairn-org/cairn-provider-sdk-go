@@ -65,8 +65,9 @@ lint: ## format check + linters + vet, warnings as errors (e2e/ included under i
 vet: ## go vet only
 	go vet $(PKGS)
 
-test: ## all tests with the race detector, shuffled
+test: ## all tests with the race detector, shuffled (e2e/ only its unit tests: no spec named, no run)
 	go test -race -shuffle=on -count=1 $(PKGS)
+	E2E_PROVIDER= E2E_SPEC= go test -race -shuffle=on -count=1 -tags e2e ./e2e
 
 cover: ## tests with coverage; fail if the total is below COVER_MIN
 	go test -count=1 -coverprofile=cover.out $(COVER_PKGS)
