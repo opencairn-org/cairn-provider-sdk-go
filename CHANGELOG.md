@@ -8,6 +8,28 @@ release matching the cairn-core contract it implements
 
 ## [Unreleased]
 
+## [0.7.3] — 2026-11-20
+
+Same code as 0.7.2. The 0.7.2 tag is a valid module version, but its release
+workflow could not finish, so it has no GitHub release; 0.7.3 is the release
+with the signed source archive.
+
+### Fixed
+- The release workflow failed for every release after the first: it compared
+  the pushed tag with the previous release, and gorelease refuses a version
+  that is already published. `make release` now makes that comparison with
+  the new version before it tags, and the workflow step is gone.
+- `make api-compat` on a release commit used the tag at HEAD as its base. A
+  local tag is now checked as the proposed version against the tag before
+  it; a published one is reported and skipped.
+- `make tools` builds fleetlint with the Go its own `go.mod` asks for, so a
+  fleetlint that needs a newer Go than this module installs in CI.
+
+### Changed
+- Renovate treats digest updates and lock file maintenance, which carry no
+  release timestamp, as old enough; their stability check no longer stays
+  pending.
+
 ## [0.7.2] — 2026-11-20
 
 Security updates of indirect dependencies, released after cairn-core 0.7.3.
