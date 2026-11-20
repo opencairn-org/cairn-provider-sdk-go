@@ -85,8 +85,13 @@ audit: api-compat ## vulnerabilities, licenses, tidy module graph, secrets, API 
 # This is a library: a breaking change in a minor release is found by every worker at once, so the
 # exported API is compared with the previous release tag (fleetlint release/api-compatibility/go).
 # Before the first tag there is nothing to compare (-base=none); gorelease still validates the module itself.
+# On a release commit the tag at HEAD is the release itself, so the base is the tag before it: comparing with HEAD's
+# own tag asks the module proxy for a version that is not published yet, and the proxy then answers "unknown
+# revision" for a while, also to the release workflow.
 api-compat: ## exported API vs the previous v* tag (gorelease); breaking change = bump the major
-	base=$$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo none)
+	ref=HEAD
+	if git describe --tags --exact-match --match 'v*' HEAD >/dev/null 2>&1; then ref=HEAD^; fi
+	base=$$(git describe --tags --abbrev=0 --match 'v*' "$$ref" 2>/dev/null || echo none)
 	gorelease -base="$$base"
 
 # End-to-end: a provider worker against a real cairn-core (../cairn-core, its compose dev services via
