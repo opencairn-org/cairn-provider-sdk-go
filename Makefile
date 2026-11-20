@@ -37,11 +37,13 @@ TOOLCHAIN   := $(shell go env GOVERSION)
 help: ## list targets
 	@grep -E '^[a-z0-9-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  %-12s %s\n", $$1, $$2}'
 
+# fleetlint is the exception among the tools: it reads the repository and compiles none of it, so it is built with
+# the Go its own go.mod asks for (1.27 since v0.10.1), which GOTOOLCHAIN=auto fetches where CI pins GOTOOLCHAIN=local.
 tools: ## install the pinned Go tools the gates use (gitleaks comes from its own release)
 	GOTOOLCHAIN=$(TOOLCHAIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 	GOTOOLCHAIN=$(TOOLCHAIN) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 	GOTOOLCHAIN=$(TOOLCHAIN) go install github.com/google/go-licenses/v2@$(GO_LICENSES_VERSION)
-	go install github.com/fleetlint/fleetlint/cmd/fleetlint@$(FLEETLINT_VERSION)
+	GOTOOLCHAIN=auto go install github.com/fleetlint/fleetlint/cmd/fleetlint@$(FLEETLINT_VERSION)
 	GOTOOLCHAIN=$(TOOLCHAIN) go install golang.org/x/exp/cmd/gorelease@$(GORELEASE_VERSION)
 	GOTOOLCHAIN=$(TOOLCHAIN) go install github.com/go-gremlins/gremlins/cmd/gremlins@$(GREMLINS_VERSION)
 
@@ -138,6 +140,8 @@ release: ## refuse dirty/non-main -> check -> signed tag V (its CHANGELOG.md sec
 	@test "$$(git branch --show-current)" = "$(MAIN_BRANCH)" || { echo "not on $(MAIN_BRANCH)"; exit 1; }
 	@grep -qF "## [$(V:v%=%)]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $(V)"; exit 1; }
 	$(MAKE) check
+	# the one place the new version is compared with the previous release: gorelease refuses it once the tag is published
+	gorelease -base="$$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo none)" -version="$(V)"
 	git tag -s "$(V)" -m "$(V)"
 	@echo "tagged $(V) — push with: git push origin $(V)"
 

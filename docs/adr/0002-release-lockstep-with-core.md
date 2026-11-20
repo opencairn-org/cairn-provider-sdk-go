@@ -30,7 +30,8 @@ therefore says little on its own; what matters is the SDK release it was built w
   `workersdk.Config.Release`. `workersdk.ReleaseCompatible` encodes the rule, so the worker
   cannot drift from the SDK it links.
 - Within a minor, the exported Go API is append-only. `make api-compat` (gorelease against the
-  previous tag) runs in `make check` and in the release workflow; a breaking Go API change is
+  previous tag) runs in `make check`, and `make release` compares the new version before it tags
+  (gorelease refuses a published version, so the release workflow cannot repeat it); a breaking Go API change is
   shipped only together with a new SDK major (and then module path `/v2`), never by silencing
   the check.
 - Dataset and parser versions (ADR 0005's other two) stay per worker: they describe a worker's
