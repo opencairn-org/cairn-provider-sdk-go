@@ -2,10 +2,12 @@
 # module (the proxy and sum.golang.org verify the contents), so the release
 # carries notes plus a source archive whose checksums are signed keyless with
 # cosign, attested by GitHub and described by an SPDX SBOM. Gates: the tag
-# must be on main, `make check` must pass, and the exported API is compared
-# with the previous tag (gorelease, fleetlint release/api-compatibility/go) —
-# a breaking change needs a new major, not a silenced tool. Actions are pinned
-# to commit SHAs; Renovate keeps the pins current.
+# must be on main and `make check` must pass. The exported API is compared
+# with the previous tag before the tag exists (`make release` runs gorelease
+# with the new version, fleetlint release/api-compatibility/go): gorelease
+# refuses a version that is already published, so this workflow cannot repeat
+# the comparison. A breaking change needs a new major, not a silenced tool.
+# Actions are pinned to commit SHAs; Renovate keeps the pins current.
 name: release
 on:
   push:
@@ -20,13 +22,13 @@ concurrency:
 
 jobs:
   verify:
-    name: make check + API compatibility
+    name: make check
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0          # gitleaks scans the history; gorelease needs the previous tag
+          fetch-depth: 0          # gitleaks scans the history; the tag must be on main
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -53,14 +55,6 @@ jobs:
           make tools
           export PATH="$(go env GOPATH)/bin:$PATH"
           make check
-      - name: API compatibility with the previous release
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          base=$(git describe --tags --abbrev=0 --match 'v*' "${TAG}^" 2>/dev/null || true)
-          if [ -z "$base" ]; then echo "first release, nothing to compare"; exit 0; fi
-          gorelease -base="$base" -version="$TAG"
 
   release:
     name: GitHub release

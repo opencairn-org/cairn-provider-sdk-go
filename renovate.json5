@@ -33,6 +33,9 @@
   // Never propose a release younger than 3 days, so hijacked-package incidents
   // are usually yanked before a PR appears. Security fixes bypass this.
   minimumReleaseAge: '3 days',
+  // Digest updates and lock file maintenance have no release timestamp; without
+  // this their renovate/stability-days check stays pending forever.
+  minimumReleaseAgeBehaviour: 'timestamp-optional',
   internalChecksFilter: 'strict',
 
   postUpdateOptions: ['gomodTidy', 'gomodUpdateImportPaths'],
