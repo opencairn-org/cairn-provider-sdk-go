@@ -8,6 +8,20 @@ release matching the cairn-core contract it implements
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-11-20
+
+Security updates of indirect dependencies, released after cairn-core 0.7.3.
+No change to the API or the worker contract.
+
+### Security
+- `golang.org/x/net` 0.62.0 fixes two flaws of its HTML parser and renderer
+  (GO-2026-6860, GO-2026-6866), and `golang.org/x/crypto` 0.59.0 covers
+  GO-2026-5932 (the unmaintained `openpgp` package, which the SDK does not
+  import). The release raises both minimums for workers built on the SDK.
+- The toolchain line is Go 1.26.11 (GO-2026-6859, an HTTP/1 server crash
+  caused by a header race in `net/http`'s `MaxBytesReader`). A worker is
+  compiled with the Go of its own build.
+
 ## [0.7.1] — 2026-11-06
 
 First release, extracted from cairn-provider-strava 0.7.0. Implements the
